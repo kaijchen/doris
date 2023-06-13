@@ -42,6 +42,7 @@
 #include <set>
 #include <string>
 #include <thread>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -194,10 +195,13 @@ class VOlapTableSinkV2;
 
 // pair<row_id,tablet_id>
 using Payload = std::pair<std::unique_ptr<vectorized::IColumn::Selector>, std::vector<int64_t>>;
+
 // pair<block,row_ids>
 struct WriteMemtableTaskClosure {
     VOlapTableSinkV2* sink;
     const vectorized::Block* block;
+    const int64_t partition_id;
+    const int64_t index_id;
     const int64_t tablet_id;
     const std::vector<int32_t>& row_idxes;
 };
@@ -504,8 +508,16 @@ private:
     friend class VNodeChannel;
     friend class IndexChannel;
 
-    // map<tablet_id, row_ids>
-    using RowsForTablet = std::unordered_map<int64_t, std::vector<int32_t>>;
+
+    // tuple<partition_id, index_id, tablet_id>
+    using TabletKey = std::tuple<int64_t, int64_t, int64_t>;
+    struct TabletKeyHash {
+        std::size_t operator()(const TabletKey& k) const {
+            return (std::get<0>(k) << 32) ^ (std::get<1>(k) << 16) ^ std::get<2>(k);
+        }
+    };
+    // map<TabletKey, row_idxes>
+    using RowsForTablet = std::unordered_map<TabletKey, std::vector<int32_t>, TabletKeyHash>;
 
     void _generate_rows_for_tablet(RowsForTablet& rows_for_tablet,
                                    const VOlapTablePartition* partition,

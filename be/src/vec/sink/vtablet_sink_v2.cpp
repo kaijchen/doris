@@ -1242,10 +1242,11 @@ void VOlapTableSinkV2::_generate_rows_for_tablet(
     // Generate channel payload for sinking data to each tablet
     for (const auto& index : partition->indexes) {
         auto tablet_id = index.tablets[tablet_index];
-        if (rows_for_tablet.count(tablet_id) == 0) {
-            rows_for_tablet.insert({tablet_id, std::vector<int32_t>()});
+        auto key = std::make_tuple(partition->id, index.index_id, tablet_id);
+        if (rows_for_tablet.count(key) == 0) {
+            rows_for_tablet.insert({key, std::vector<int32_t>()});
         }
-        rows_for_tablet[tablet_id].push_back(row_idx);
+        rows_for_tablet[key].push_back(row_idx);
         _number_output_rows += row_cnt;
     }
 }
@@ -1323,7 +1324,10 @@ Status VOlapTableSinkV2::send(RuntimeState* state, vectorized::Block* input_bloc
     // For each tablet, send its rows from block to delta writer
     for (const auto& entry : rows_for_tablet) {
         bthread_t th;
-        auto closure = new WriteMemtableTaskClosure {this, &block, entry.first, entry.second};
+        auto closure = new WriteMemtableTaskClosure {
+                this, &block, std::get<0>(entry.first), std::get<1>(entry.first),
+                std::get<2>(entry.first), entry.second
+        };
         _flying_task_count++;
         bthread_start_background(&th, nullptr, _write_memtable_task, closure);
     }
@@ -1339,14 +1343,30 @@ void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
             sink->_state->exec_env()->delta_writer_for_tablet();
     auto& delta_writer_for_tablet_mutex =
             sink->_state->exec_env()->delta_writer_for_tablet_mutex();
-    DeltaWriter* delta_writer;
+    DeltaWriter* delta_writer = nullptr;
     {
         std::lock_guard<std::mutex> l(delta_writer_for_tablet_mutex);
         auto it = delta_writer_for_tablet.find(ctx->tablet_id);
         if (it == delta_writer_for_tablet.end()) {
-            UniqueId load_id;
-            // TODO: fill args for creating delta_writer
-            DeltaWriter::open(nullptr, &delta_writer, nullptr, load_id);
+            WriteRequest wrequest;
+            wrequest.partition_id = ctx->partition_id;
+            wrequest.index_id = ctx->index_id;
+            wrequest.tablet_id = ctx->tablet_id;
+            wrequest.write_type = WriteType::LOAD;
+            wrequest.txn_id = sink->_txn_id;
+            wrequest.load_id = sink->_load_id;
+            wrequest.tuple_desc = sink->_output_tuple_desc;
+            wrequest.is_high_priority = sink->_is_high_priority;
+            wrequest.table_schema_param = sink->_schema.get();
+            for (auto& index : sink->_schema->indexes()) {
+                if (index->index_id == ctx->index_id) {
+                    wrequest.slots = &index->slots;
+                    wrequest.schema_hash = index->schema_hash;
+                    break;
+                }
+            }
+            // TODO: assign stream id to DeltaWriter
+            DeltaWriter::open(&wrequest, &delta_writer, sink->_profile, sink->_load_id);
             delta_writer_for_tablet.insert({ctx->tablet_id, delta_writer});
         } else {
             delta_writer = it->second;
