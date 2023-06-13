@@ -1258,29 +1258,6 @@ Status VOlapTableSinkV2::find_tablet(RuntimeState* state, vectorized::Block* blo
     return status;
 }
 
-void VOlapTableSinkV2::_generate_row_distribution_payload(
-        ChannelDistributionPayload& channel_to_payload, const VOlapTablePartition* partition,
-        uint32_t tablet_index, int row_idx, size_t row_cnt) {
-    // Generate channel payload for sinking data to differenct node channel
-    for (int j = 0; j < partition->indexes.size(); ++j) {
-        auto tid = partition->indexes[j].tablets[tablet_index];
-        auto it = _channels[j]->_channels_by_tablet.find(tid);
-        DCHECK(it != _channels[j]->_channels_by_tablet.end())
-                << "unknown tablet, tablet_id=" << tablet_index;
-        for (const auto& channel : it->second) {
-            if (channel_to_payload[j].count(channel.get()) < 1) {
-                channel_to_payload[j].insert(
-                        {channel.get(), Payload {std::unique_ptr<vectorized::IColumn::Selector>(
-                                                         new vectorized::IColumn::Selector()),
-                                                 std::vector<int64_t>()}});
-            }
-            channel_to_payload[j][channel.get()].first->push_back(row_idx);
-            channel_to_payload[j][channel.get()].second.push_back(tid);
-        }
-        _number_output_rows += row_cnt;
-    }
-}
-
 void VOlapTableSinkV2::_generate_rows_for_tablet(
         RowsForTablet& rows_for_tablet, const VOlapTablePartition* partition,
         uint32_t tablet_index, int row_idx, size_t row_cnt) {
