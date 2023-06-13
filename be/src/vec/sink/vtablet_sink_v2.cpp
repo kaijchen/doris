@@ -1108,12 +1108,6 @@ Status VOlapTableSinkV2::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-static void* periodic_send_batch(void* sink) {
-    VOlapTableSinkV2* vsink = (VOlapTableSinkV2*)sink;
-    vsink->_send_batch_process();
-    return nullptr;
-}
-
 Status VOlapTableSinkV2::open(RuntimeState* state) {
     // Prepare the exprs to run.
     RETURN_IF_ERROR(vectorized::VExpr::open(_output_vexpr_ctxs, state));
