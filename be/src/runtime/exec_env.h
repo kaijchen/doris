@@ -42,6 +42,7 @@ class BfdParser;
 class BrokerMgr;
 template <class T>
 class BrpcClientCache;
+class DeltaWriter;
 class ExternalScanContextMgr;
 class FragmentMgr;
 class ResultCache;
@@ -180,6 +181,13 @@ public:
         this->_stream_load_executor = stream_load_executor;
     }
 
+    std::unordered_map<uint64_t, DeltaWriter*>& delta_writer_for_tablet() {
+        return _delta_writer_for_tablet;
+    }
+    std::mutex& delta_writer_for_tablet_mutex() {
+        return _delta_writer_for_tablet_mutex;
+    }
+
 private:
     Status _init(const std::vector<StorePath>& store_paths);
     void _destroy();
@@ -252,6 +260,9 @@ private:
     doris::vectorized::ScannerScheduler* _scanner_scheduler = nullptr;
 
     BlockSpillManager* _block_spill_mgr = nullptr;
+
+    std::unordered_map<uint64_t, DeltaWriter*> _delta_writer_for_tablet;
+    std::mutex _delta_writer_for_tablet_mutex;
 };
 
 template <>

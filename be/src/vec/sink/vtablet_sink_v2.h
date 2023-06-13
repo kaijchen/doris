@@ -194,6 +194,13 @@ class VOlapTableSinkV2;
 
 // pair<row_id,tablet_id>
 using Payload = std::pair<std::unique_ptr<vectorized::IColumn::Selector>, std::vector<int64_t>>;
+// pair<block,row_ids>
+struct WriteMemtableTaskClosure {
+    VOlapTableSinkV2* sink;
+    const vectorized::Block* block;
+    const int64_t tablet_id;
+    const std::vector<int32_t>& row_idxes;
+};
 
 class VNodeChannelStat {
 public:
@@ -485,11 +492,19 @@ private:
     friend class IndexChannel;
 
     using ChannelDistributionPayload = std::vector<std::unordered_map<VNodeChannel*, Payload>>;
+    using TabletDistributionPayload = std::unordered_map<uint32_t, Payload>;
+
+    // map<tablet_id, row_ids>
+    using RowsForTablet = std::unordered_map<int64_t, std::vector<int32_t>>;
 
     // payload for each row
     void _generate_row_distribution_payload(ChannelDistributionPayload& payload,
                                             const VOlapTablePartition* partition,
                                             uint32_t tablet_index, int row_idx, size_t row_cnt);
+    void _generate_rows_for_tablet(RowsForTablet& rows_for_tablet,
+                                   const VOlapTablePartition* partition,
+                                   uint32_t tablet_index, int row_idx, size_t row_cnt);
+    static void* _write_memtable_task(void* write_ctx);
 
     // make input data valid for OLAP table
     // return number of invalid/filtered rows.
@@ -633,6 +648,8 @@ private:
     RuntimeState* _state = nullptr;
 
     std::unordered_set<int64_t> _opened_partitions;
+
+    std::atomic<int32_t> _flying_task_count {0};
 };
 
 } // namespace stream_load

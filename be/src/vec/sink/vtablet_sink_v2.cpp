@@ -46,6 +46,7 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exec/tablet_info.h"
+#include "olap/delta_writer.h"
 #include "runtime/define_primitive_type.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -1280,6 +1281,20 @@ void VOlapTableSinkV2::_generate_row_distribution_payload(
     }
 }
 
+void VOlapTableSinkV2::_generate_rows_for_tablet(
+        RowsForTablet& rows_for_tablet, const VOlapTablePartition* partition,
+        uint32_t tablet_index, int row_idx, size_t row_cnt) {
+    // Generate channel payload for sinking data to each tablet
+    for (const auto& index : partition->indexes) {
+        auto tablet_id = index.tablets[tablet_index];
+        if (rows_for_tablet.count(tablet_id) == 0) {
+            rows_for_tablet.insert({tablet_id, std::vector<int32_t>()});
+        }
+        rows_for_tablet[tablet_id].push_back(row_idx);
+        _number_output_rows += row_cnt;
+    }
+}
+
 Status VOlapTableSinkV2::send(RuntimeState* state, vectorized::Block* input_block, bool eos) {
     SCOPED_CONSUME_MEM_TRACKER(_mem_tracker.get());
     Status status = Status::OK();
@@ -1325,8 +1340,7 @@ Status VOlapTableSinkV2::send(RuntimeState* state, vectorized::Block* input_bloc
     SCOPED_RAW_TIMER(&_send_data_ns);
     // This is just for passing compilation.
     bool stop_processing = false;
-    std::vector<std::unordered_map<VNodeChannel*, Payload>> channel_to_payload;
-    channel_to_payload.resize(_channels.size());
+    RowsForTablet rows_for_tablet;
     if (findTabletMode == FIND_TABLET_EVERY_BATCH) {
         // Recaculate is needed
         _partition_to_tablet_map.clear();
@@ -1345,56 +1359,49 @@ Status VOlapTableSinkV2::send(RuntimeState* state, vectorized::Block* input_bloc
             continue;
         }
         // each row
-        _generate_row_distribution_payload(channel_to_payload, partition, tablet_index, i, 1);
-        // open partition
-        if (config::enable_lazy_open_partition) {
-            // aysnc open operation,don't block send operation
-            _open_partition(partition);
-        }
+        _generate_rows_for_tablet(rows_for_tablet, partition, tablet_index, i, 1);
+        // TODO:: lazy open partition
     }
     _row_distribution_watch.stop();
-    // Random distribution and the block belongs to a single tablet, we could optimize to append the whole
-    // block into node channel.
-    bool load_block_to_single_tablet =
-            !_schema->is_dynamic_schema() && _partition_to_tablet_map.size() == 1;
-    if (load_block_to_single_tablet) {
-        SCOPED_RAW_TIMER(&_filter_ns);
-        // clear and release the references of columns
-        input_block->clear();
-        // Filter block
-        if (filtered_rows > 0) {
-            auto filter = vectorized::ColumnUInt8::create(block.rows(), 0);
-            vectorized::UInt8* filter_data =
-                    static_cast<vectorized::ColumnUInt8*>(filter.get())->get_data().data();
-            vectorized::IColumn::Filter& filter_col =
-                    static_cast<vectorized::ColumnUInt8*>(filter.get())->get_data();
-            for (size_t i = 0; i < filter_col.size(); ++i) {
-                filter_data[i] = !_filter_bitmap.Get(i);
-            }
-            RETURN_IF_CATCH_EXCEPTION(
-                    vectorized::Block::filter_block_internal(&block, filter_col, block.columns()));
-        }
-    }
-    // Add block to node channel
-    for (size_t i = 0; i < _channels.size(); i++) {
-        for (const auto& entry : channel_to_payload[i]) {
-            // if this node channel is already failed, this add_row will be skipped
-            auto st = entry.first->add_block(
-                    &block, &entry.second,
-                    // if it is load single tablet, then append this whole block
-                    load_block_to_single_tablet);
-            if (!st.ok()) {
-                _channels[i]->mark_as_failed(entry.first->node_id(), entry.first->host(),
-                                             st.to_string());
-            }
-        }
+    // TODO: optimize for single tablet
+
+    // For each tablet, send its rows from block to delta writer
+    for (const auto& entry : rows_for_tablet) {
+        bthread_t th;
+        auto closure = new WriteMemtableTaskClosure {this, &block, entry.first, entry.second};
+        _flying_task_count++;
+        bthread_start_background(&th, nullptr, _write_memtable_task, closure);
     }
 
-    // check intolerable failure
-    for (const auto& index_channel : _channels) {
-        RETURN_IF_ERROR(index_channel->check_intolerable_failure());
-    }
+    // TODO: check intolerable failure
     return Status::OK();
+}
+
+void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
+    auto ctx = static_cast<WriteMemtableTaskClosure*>(closure);
+    VOlapTableSinkV2* sink = ctx->sink;
+    auto& delta_writer_for_tablet =
+            sink->_state->exec_env()->delta_writer_for_tablet();
+    auto& delta_writer_for_tablet_mutex =
+            sink->_state->exec_env()->delta_writer_for_tablet_mutex();
+    DeltaWriter* delta_writer;
+    {
+        std::lock_guard<std::mutex> l(delta_writer_for_tablet_mutex);
+        auto it = delta_writer_for_tablet.find(ctx->tablet_id);
+        if (it == delta_writer_for_tablet.end()) {
+            UniqueId load_id;
+            // TODO: fill args for creating delta_writer
+            DeltaWriter::open(nullptr, &delta_writer, nullptr, load_id);
+            delta_writer_for_tablet.insert({ctx->tablet_id, delta_writer});
+        } else {
+            delta_writer = it->second;
+        }
+    }
+    auto st = delta_writer->write(ctx->block, ctx->row_idxes, false);
+    sink->_flying_task_count--;
+    delete ctx;
+    DCHECK_EQ(st, Status::OK()) << "DeltaWriter::write failed";
+    return nullptr;
 }
 
 Status VOlapTableSinkV2::close(RuntimeState* state, Status exec_status) {
