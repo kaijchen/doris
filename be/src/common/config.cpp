@@ -743,6 +743,9 @@ DEFINE_mInt32(max_send_batch_parallelism_per_job, "5");
 DEFINE_Validator(max_send_batch_parallelism_per_job,
                  [](const int config) -> bool { return config >= 1; });
 
+// number of brpc stream per OlapTableSinkV2
+DEFINE_Int32(stream_cnt_per_sink, "1");
+
 // number of send batch thread pool size
 DEFINE_Int32(send_batch_thread_pool_thread_num, "64");
 // number of send batch thread pool queue size

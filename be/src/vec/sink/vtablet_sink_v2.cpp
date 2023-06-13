@@ -1121,38 +1121,22 @@ Status VOlapTableSinkV2::open(RuntimeState* state) {
     SCOPED_TIMER(_open_timer);
     SCOPED_CONSUME_MEM_TRACKER(_mem_tracker.get());
 
-    fmt::memory_buffer buf;
-    for (auto index_channel : _channels) {
-        fmt::format_to(buf, "index id:{}", index_channel->_index_id);
-        index_channel->for_each_node_channel(
-                [](const std::shared_ptr<VNodeChannel>& ch) { ch->open(); });
-    }
-    VLOG_DEBUG << "list of open index id = " << fmt::to_string(buf);
+    std::vector<brpc::StreamId> stream_pool;
 
-    for (auto index_channel : _channels) {
-        index_channel->for_each_node_channel([&index_channel](
-                                                     const std::shared_ptr<VNodeChannel>& ch) {
-            auto st = ch->open_wait();
-            if (!st.ok()) {
-                // The open() phase is mainly to generate DeltaWriter instances on the nodes corresponding to each node channel.
-                // This phase will not fail due to a single tablet.
-                // Therefore, if the open() phase fails, all tablets corresponding to the node need to be marked as failed.
-                index_channel->mark_as_failed(
-                        ch->node_id(), ch->host(),
-                        fmt::format("{}, open failed, err: {}", ch->channel_info(), st.to_string()),
-                        -1);
-            }
-        });
+    for (int i = 0; i < config::stream_cnt_per_sink; ++i) {
+        brpc::StreamOptions opt;
+        opt.max_buf_size = 20 << 20; // 20MB
+        opt.idle_timeout_ms = 30000;
+        opt.messages_in_batch = 128;
+        opt.handler = new StreamSinkHandler();
+        brpc::StreamId id;
+        brpc::Controller cntl;
+        // TODO: fix id cntl and handler
+        stream_pool.push_back(StreamCreate(&id, cntl, &opt));
+        // TODO: connect & accept
+    }
 
-        RETURN_IF_ERROR(index_channel->check_intolerable_failure());
-    }
-    int32_t send_batch_parallelism =
-            MIN(_send_batch_parallelism, config::max_send_batch_parallelism_per_job);
-    _send_batch_thread_pool_token = state->exec_env()->send_batch_thread_pool()->new_token(
-            ThreadPool::ExecutionMode::CONCURRENT, send_batch_parallelism);
-    if (bthread_start_background(&_sender_thread, NULL, periodic_send_batch, (void*)this) != 0) {
-        return Status::Error<INTERNAL_ERROR>("bthread_start_backgroud failed");
-    }
+    // TODO: RPC
 
     return Status::OK();
 }

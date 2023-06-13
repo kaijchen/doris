@@ -454,6 +454,19 @@ private:
     std::map<int64_t, std::vector<std::pair<int64_t, int64_t>>> _tablets_received_rows;
 };
 
+class StreamSinkHandler: public brpc::StreamInputHandler {
+public:
+    int on_received_messages(brpc::StreamId id, butil::IOBuf *const messages[], size_t size) override {
+        return 0;
+    }
+
+    void on_idle_timeout(brpc::StreamId id) override {
+    }
+
+    void on_closed(brpc::StreamId id) override {
+    }
+};
+
 // Write block data to Olap Table.
 // When OlapTableSink::open() called, there will be a consumer thread running in the background.
 // When you call VOlapTableSinkV2::send(), you will be the producer who products pending batches.

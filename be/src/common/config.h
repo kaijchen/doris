@@ -777,6 +777,9 @@ DECLARE_mBool(runtime_filter_use_async_rpc);
 // if exceed, the value of send_batch_parallelism would be max_send_batch_parallelism_per_job
 DECLARE_mInt32(max_send_batch_parallelism_per_job);
 
+// number of brpc stream per OlapTableSinkV2
+DECLARE_Int32(stream_cnt_per_sink);
+
 // number of send batch thread pool size
 DECLARE_Int32(send_batch_thread_pool_thread_num);
 // number of send batch thread pool queue size
