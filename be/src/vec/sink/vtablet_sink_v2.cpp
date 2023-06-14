@@ -1115,23 +1115,32 @@ Status VOlapTableSinkV2::open(RuntimeState* state) {
     SCOPED_TIMER(_open_timer);
     SCOPED_CONSUME_MEM_TRACKER(_mem_tracker.get());
 
-    std::vector<brpc::StreamId> stream_pool;
-
     for (int i = 0; i < config::stream_cnt_per_sink; ++i) {
         brpc::StreamOptions opt;
         opt.max_buf_size = 20 << 20; // 20MB
         opt.idle_timeout_ms = 30000;
         opt.messages_in_batch = 128;
         opt.handler = new StreamSinkHandler();
-        brpc::StreamId id;
+        brpc::StreamId stream;
         brpc::Controller cntl;
-        // TODO: fix id cntl and handler
-        stream_pool.push_back(StreamCreate(&id, cntl, &opt));
-        // TODO: connect & accept
+        if (StreamCreate(&stream, cntl, &opt) != 0) {
+            LOG(ERROR) << "Failed to create stream";
+            return Status::RpcError("Failed to create stream");
+        }
+        LOG(INFO) << "Created stream " << stream;
+        // randomly choose a BE to be the primary BE
+        const auto& node_info = _nodes_info->nodes_info().begin()->second;
+        const auto& stub = state->exec_env()->brpc_internal_client_cache()
+                ->get_client(node_info.host, node_info.brpc_port);
+        PSegmentFlushRequest request;
+        PSegmentFlushResult response;
+        stub->segment_flush(&cntl, &request, &response, nullptr);
+        if (cntl.Failed()) {
+            LOG(ERROR) << "Fail to connect stream, " << cntl.ErrorText();
+            return Status::RpcError("Failed to connect stream");
+        }
+        _stream_pool.push_back(stream);
     }
-
-    // TODO: RPC
-
     return Status::OK();
 }
 
@@ -1365,8 +1374,10 @@ void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
                     break;
                 }
             }
-            // TODO: assign stream id to DeltaWriter
+            brpc::StreamId& stream = sink->_stream_pool[sink->_stream_pool_index];
+            sink->_stream_pool_index = (sink->_stream_pool_index + 1) % config::stream_cnt_per_sink;
             DeltaWriter::open(&wrequest, &delta_writer, sink->_profile, sink->_load_id);
+            delta_writer->add_stream(stream);
             delta_writer_for_tablet.insert({ctx->tablet_id, delta_writer});
         } else {
             delta_writer = it->second;

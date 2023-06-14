@@ -667,6 +667,9 @@ private:
 
     std::unordered_set<int64_t> _opened_partitions;
 
+    std::vector<brpc::StreamId> _stream_pool;
+    int32_t _stream_pool_index = 0;
+
     std::atomic<int32_t> _flying_task_count {0};
 };
 
