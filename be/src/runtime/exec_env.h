@@ -26,6 +26,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include <brpc/stream.h>
+
 #include "common/status.h"
 #include "olap/options.h"
 #include "util/threadpool.h"
@@ -181,6 +183,13 @@ public:
         this->_stream_load_executor = stream_load_executor;
     }
 
+    std::vector<brpc::StreamId>& stream_pool() {
+        return _stream_pool;
+    }
+    std::mutex& stream_pool_mutex() {
+        return _stream_pool_mutex;
+    }
+
     std::unordered_map<uint64_t, DeltaWriter*>& delta_writer_for_tablet() {
         return _delta_writer_for_tablet;
     }
@@ -261,6 +270,8 @@ private:
 
     BlockSpillManager* _block_spill_mgr = nullptr;
 
+    std::vector<brpc::StreamId> _stream_pool;
+    std::mutex _stream_pool_mutex;
     std::unordered_map<uint64_t, DeltaWriter*> _delta_writer_for_tablet;
     std::mutex _delta_writer_for_tablet_mutex;
 };

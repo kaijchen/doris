@@ -1115,6 +1115,22 @@ Status VOlapTableSinkV2::open(RuntimeState* state) {
     SCOPED_TIMER(_open_timer);
     SCOPED_CONSUME_MEM_TRACKER(_mem_tracker.get());
 
+    if (config::shared_delta_writer) {
+        auto& stream_pool = _state->exec_env()->stream_pool();
+        auto& stream_pool_mutex = _state->exec_env()->stream_pool_mutex();
+        std::lock_guard<std::mutex> l(stream_pool_mutex);
+        if (stream_pool.size() > 0) {
+            return Status::OK();
+        }
+        return _create_stream_pool(stream_pool);
+    } else {
+        return _create_stream_pool(_stream_pool);
+    }
+}
+
+Status VOlapTableSinkV2::_create_stream_pool(std::vector<brpc::StreamId>& stream_pool) {
+    DCHECK_GT(config::stream_cnt_per_sink, 0);
+    stream_pool.reserve(config::stream_cnt_per_sink);
     for (int i = 0; i < config::stream_cnt_per_sink; ++i) {
         brpc::StreamOptions opt;
         opt.max_buf_size = 20 << 20; // 20MB
@@ -1130,8 +1146,8 @@ Status VOlapTableSinkV2::open(RuntimeState* state) {
         LOG(INFO) << "Created stream " << stream;
         // randomly choose a BE to be the primary BE
         const auto& node_info = _nodes_info->nodes_info().begin()->second;
-        const auto& stub = state->exec_env()->brpc_internal_client_cache()
-                ->get_client(node_info.host, node_info.brpc_port);
+        const auto& stub = _state->exec_env()->brpc_internal_client_cache()->get_client(
+                node_info.host, node_info.brpc_port);
         PSegmentFlushRequest request;
         PSegmentFlushResult response;
         stub->segment_flush(&cntl, &request, &response, nullptr);
@@ -1139,7 +1155,7 @@ Status VOlapTableSinkV2::open(RuntimeState* state) {
             LOG(ERROR) << "Fail to connect stream, " << cntl.ErrorText();
             return Status::RpcError("Failed to connect stream");
         }
-        _stream_pool.push_back(stream);
+        stream_pool.push_back(stream);
     }
     return Status::OK();
 }
@@ -1348,10 +1364,14 @@ Status VOlapTableSinkV2::send(RuntimeState* state, vectorized::Block* input_bloc
 void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
     auto ctx = static_cast<WriteMemtableTaskClosure*>(closure);
     VOlapTableSinkV2* sink = ctx->sink;
-    auto& delta_writer_for_tablet =
-            sink->_state->exec_env()->delta_writer_for_tablet();
-    auto& delta_writer_for_tablet_mutex =
-            sink->_state->exec_env()->delta_writer_for_tablet_mutex();
+    auto exec_env = sink->_state->exec_env();
+    auto& delta_writer_for_tablet = config::shared_delta_writer
+                                            ? exec_env->delta_writer_for_tablet()
+                                            : sink->_delta_writer_for_tablet;
+    auto& delta_writer_for_tablet_mutex = config::shared_delta_writer
+                                                  ? exec_env->delta_writer_for_tablet_mutex()
+                                                  : sink->_delta_writer_for_tablet_mutex;
+    const auto& stream_pool = config::shared_delta_writer ? exec_env->stream_pool() : sink->_stream_pool;
     DeltaWriter* delta_writer = nullptr;
     {
         std::lock_guard<std::mutex> l(delta_writer_for_tablet_mutex);
@@ -1374,7 +1394,7 @@ void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
                     break;
                 }
             }
-            brpc::StreamId& stream = sink->_stream_pool[sink->_stream_pool_index];
+            const brpc::StreamId& stream = stream_pool[sink->_stream_pool_index];
             sink->_stream_pool_index = (sink->_stream_pool_index + 1) % config::stream_cnt_per_sink;
             DeltaWriter::open(&wrequest, &delta_writer, sink->_profile, sink->_load_id);
             delta_writer->add_stream(stream);

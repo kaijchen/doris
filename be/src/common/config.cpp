@@ -745,6 +745,8 @@ DEFINE_Validator(max_send_batch_parallelism_per_job,
 
 // number of brpc stream per OlapTableSinkV2
 DEFINE_Int32(stream_cnt_per_sink, "1");
+// whether the DeltaWriters should be shared among OlapTableSinkV2
+DEFINE_Bool(shared_delta_writer, "false");
 
 // number of send batch thread pool size
 DEFINE_Int32(send_batch_thread_pool_thread_num, "64");

@@ -508,6 +508,7 @@ private:
     friend class VNodeChannel;
     friend class IndexChannel;
 
+    Status _create_stream_pool(std::vector<brpc::StreamId>& stream_pool);
 
     // tuple<partition_id, index_id, tablet_id>
     using TabletKey = std::tuple<int64_t, int64_t, int64_t>;
@@ -671,6 +672,9 @@ private:
     int32_t _stream_pool_index = 0;
 
     std::atomic<int32_t> _flying_task_count {0};
+
+    std::unordered_map<uint64_t, DeltaWriter*> _delta_writer_for_tablet;
+    std::mutex _delta_writer_for_tablet_mutex;
 };
 
 } // namespace stream_load
