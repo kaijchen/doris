@@ -460,7 +460,23 @@ private:
 
 class StreamSinkHandler: public brpc::StreamInputHandler {
 public:
+    StreamSinkHandler(std::condition_variable& cv) : _all_stream_done_cv(cv) {}
+
     int on_received_messages(brpc::StreamId id, butil::IOBuf *const messages[], size_t size) override {
+        /*
+        <loadid, index, tablet, beid, status> = parseHdr(message);
+        switch (status) {
+        case FAILED:
+            s = check_tolerable(); // 检查 tablet_error_map 这个 tablet 的错误副本数是否超过 (replica+1)/2
+            if (s.ok()) {
+                cancel load; // 对于无法容忍的错误（多数副本失败），cancel 本次 load
+            } else {
+                tablet_error_map[<index, tablet>] = <tablet, beid> // 将错误记录在小本本上
+            }
+        case SUCCESS:
+            tablet_success_map[<index, tablet>] = <tablet, beid>
+        }
+        */
         return 0;
     }
 
@@ -468,7 +484,11 @@ public:
     }
 
     void on_closed(brpc::StreamId id) override {
+        _all_stream_done_cv.notify_one();
     }
+
+private:
+    std::condition_variable& _all_stream_done_cv;
 };
 
 // Write block data to Olap Table.
@@ -593,7 +613,6 @@ private:
     // index_channel
     std::vector<std::shared_ptr<IndexChannel>> _channels;
 
-    bthread_t _sender_thread = 0;
     std::unique_ptr<ThreadPoolToken> _send_batch_thread_pool_token;
 
     std::map<std::pair<int, int>, DecimalV2Value> _max_decimalv2_val;
@@ -613,7 +632,6 @@ private:
     int64_t _number_output_rows = 0;
     int64_t _number_filtered_rows = 0;
     int64_t _number_immutable_partition_filtered_rows = 0;
-    int64_t _filter_ns = 0;
 
     MonotonicStopWatch _row_distribution_watch;
 
@@ -675,6 +693,9 @@ private:
 
     std::unordered_map<uint64_t, DeltaWriter*> _delta_writer_for_tablet;
     std::mutex _delta_writer_for_tablet_mutex;
+
+    std::mutex _all_stream_done_mutex;
+    std::condition_variable _all_stream_done_cv;
 };
 
 } // namespace stream_load

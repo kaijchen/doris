@@ -1136,7 +1136,7 @@ Status VOlapTableSinkV2::_create_stream_pool(std::vector<brpc::StreamId>& stream
         opt.max_buf_size = 20 << 20; // 20MB
         opt.idle_timeout_ms = 30000;
         opt.messages_in_batch = 128;
-        opt.handler = new StreamSinkHandler();
+        opt.handler = new StreamSinkHandler(_all_stream_done_cv);
         brpc::StreamId stream;
         brpc::Controller cntl;
         if (StreamCreate(&stream, cntl, &opt) != 0) {
@@ -1421,96 +1421,22 @@ Status VOlapTableSinkV2::close(RuntimeState* state, Status exec_status) {
         // only if status is ok can we call this _profile->total_time_counter().
         // if status is not ok, this sink may not be prepared, so that _profile is null
         SCOPED_TIMER(_profile->total_time_counter());
-        // BE id -> add_batch method counter
-        std::unordered_map<int64_t, AddBatchCounter> node_add_batch_counter_map;
-        int64_t serialize_batch_ns = 0, queue_push_lock_ns = 0, actual_consume_ns = 0,
-                total_add_batch_exec_time_ns = 0, max_add_batch_exec_time_ns = 0,
-                total_wait_exec_time_ns = 0, max_wait_exec_time_ns = 0, total_add_batch_num = 0,
-                num_node_channels = 0;
-        VNodeChannelStat channel_stat;
-        {
-            if (config::enable_lazy_open_partition) {
-                for (auto index_channel : _channels) {
-                    index_channel->for_each_node_channel(
-                            [](const std::shared_ptr<VNodeChannel>& ch) {
-                                ch->open_partition_wait();
-                            });
-                }
-            }
 
-            for (auto index_channel : _channels) {
-                index_channel->for_each_node_channel(
-                        [](const std::shared_ptr<VNodeChannel>& ch) { ch->mark_close(); });
-                num_node_channels += index_channel->num_node_channels();
-            }
+        // TODO: update profile & metrics
 
-            for (auto index_channel : _channels) {
-                int64_t add_batch_exec_time = 0;
-                int64_t wait_exec_time = 0;
-                index_channel->for_each_node_channel(
-                        [&index_channel, &state, &node_add_batch_counter_map, &serialize_batch_ns,
-                         &channel_stat, &queue_push_lock_ns, &actual_consume_ns,
-                         &total_add_batch_exec_time_ns, &add_batch_exec_time,
-                         &total_wait_exec_time_ns, &wait_exec_time,
-                         &total_add_batch_num](const std::shared_ptr<VNodeChannel>& ch) {
-                            auto s = ch->close_wait(state);
-                            if (!s.ok()) {
-                                auto err_msg = s.to_string();
-                                index_channel->mark_as_failed(ch->node_id(), ch->host(), err_msg,
-                                                              -1);
-                                // cancel the node channel in best effort
-                                ch->cancel(err_msg);
-                                LOG(WARNING) << ch->channel_info()
-                                             << ", close channel failed, err: " << err_msg;
-                            }
-                            ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns,
-                                            &channel_stat, &queue_push_lock_ns, &actual_consume_ns,
-                                            &total_add_batch_exec_time_ns, &add_batch_exec_time,
-                                            &total_wait_exec_time_ns, &wait_exec_time,
-                                            &total_add_batch_num);
-                        });
-
-                if (add_batch_exec_time > max_add_batch_exec_time_ns) {
-                    max_add_batch_exec_time_ns = add_batch_exec_time;
-                }
-                if (wait_exec_time > max_wait_exec_time_ns) {
-                    max_wait_exec_time_ns = wait_exec_time;
-                }
-
-                // check if index has intolerable failure
-                Status index_st = index_channel->check_intolerable_failure();
-                if (!index_st.ok()) {
-                    status = index_st;
-                } else if (Status st = index_channel->check_tablet_received_rows_consistency();
-                           !st.ok()) {
-                    status = st;
-                }
-            } // end for index channels
+        for (const auto& stream_id : _stream_pool) {
+            brpc::StreamClose(stream_id);
         }
-        // TODO need to be improved
-        LOG(INFO) << "total mem_exceeded_block_ns=" << channel_stat.mem_exceeded_block_ns
-                  << ", total queue_push_lock_ns=" << queue_push_lock_ns
-                  << ", total actual_consume_ns=" << actual_consume_ns
-                  << ", load id=" << print_id(_load_id);
 
-        COUNTER_SET(_input_rows_counter, _number_input_rows);
-        COUNTER_SET(_output_rows_counter, _number_output_rows);
-        COUNTER_SET(_filtered_rows_counter, _number_filtered_rows);
-        COUNTER_SET(_send_data_timer, _send_data_ns);
-        COUNTER_SET(_row_distribution_timer, (int64_t)_row_distribution_watch.elapsed_time());
-        COUNTER_SET(_filter_timer, _filter_ns);
-        COUNTER_SET(_append_node_channel_timer, channel_stat.append_node_channel_ns);
-        COUNTER_SET(_where_clause_timer, channel_stat.where_clause_ns);
-        COUNTER_SET(_wait_mem_limit_timer, channel_stat.mem_exceeded_block_ns);
-        COUNTER_SET(_validate_data_timer, _validate_data_ns);
-        COUNTER_SET(_serialize_batch_timer, serialize_batch_ns);
-        COUNTER_SET(_non_blocking_send_work_timer, actual_consume_ns);
-        COUNTER_SET(_total_add_batch_exec_timer, total_add_batch_exec_time_ns);
-        COUNTER_SET(_max_add_batch_exec_timer, max_add_batch_exec_time_ns);
-        COUNTER_SET(_total_wait_exec_timer, total_wait_exec_time_ns);
-        COUNTER_SET(_max_wait_exec_timer, max_wait_exec_time_ns);
-        COUNTER_SET(_add_batch_number, total_add_batch_num);
-        COUNTER_SET(_num_node_channels, num_node_channels);
+        {
+            std::unique_lock l(_all_stream_done_mutex);
+            _all_stream_done_cv.wait(l);
+        }
+
+        // TODO: construct commitInfos from tablet_success_map
+        TTabletCommitInfo commitInfos;
+        state->tablet_commit_infos().push_back(commitInfos);
+
         // _number_input_rows don't contain num_rows_load_filtered and num_rows_load_unselected in scan node
         int64_t num_rows_load_total = _number_input_rows + state->num_rows_load_filtered() +
                                       state->num_rows_load_unselected();
@@ -1518,36 +1444,12 @@ Status VOlapTableSinkV2::close(RuntimeState* state, Status exec_status) {
         state->update_num_rows_load_filtered(_number_filtered_rows);
         state->update_num_rows_load_unselected(_number_immutable_partition_filtered_rows);
 
-        // print log of add batch time of all node, for tracing load performance easily
-        std::stringstream ss;
-        ss << "finished to close olap table sink. load_id=" << print_id(_load_id)
-           << ", txn_id=" << _txn_id
-           << ", node add batch time(ms)/wait execution time(ms)/close time(ms)/num: ";
-        for (auto const& pair : node_add_batch_counter_map) {
-            ss << "{" << pair.first << ":(" << (pair.second.add_batch_execution_time_us / 1000)
-               << ")(" << (pair.second.add_batch_wait_execution_time_us / 1000) << ")("
-               << pair.second.close_wait_time_ms << ")(" << pair.second.add_batch_num << ")} ";
-        }
-        LOG(INFO) << ss.str();
+        // TODO: print log of add batch time of all node, for tracing load performance easily
     } else {
-        for (auto channel : _channels) {
-            channel->for_each_node_channel([&status](const std::shared_ptr<VNodeChannel>& ch) {
-                ch->cancel(status.to_string());
-            });
-        }
+        // TODO: cancel
         LOG(INFO) << "finished to close olap table sink. load_id=" << print_id(_load_id)
                   << ", txn_id=" << _txn_id
                   << ", canceled all node channels due to error: " << status;
-    }
-
-    // Sender join() must put after node channels mark_close/cancel.
-    // But there is no specific sequence required between sender join() & close_wait().
-    if (_sender_thread) {
-        bthread_join(_sender_thread, nullptr);
-        // We have to wait all task in _send_batch_thread_pool_token finished,
-        // because it is difficult to handle concurrent problem if we just
-        // shutdown it.
-        _send_batch_thread_pool_token->wait();
     }
 
     _close_status = status;
