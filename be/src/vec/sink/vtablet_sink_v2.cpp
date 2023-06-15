@@ -457,7 +457,7 @@ void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
                 }
             }
             const brpc::StreamId& stream = sink->_stream_pool->at(sink->_stream_pool_index);
-            sink->_stream_pool_index = (sink->_stream_pool_index + 1) % config::stream_cnt_per_sink;
+            sink->_stream_pool_index = (sink->_stream_pool_index + 1) % sink->_stream_pool->size();
             DeltaWriter::open(&wrequest, &delta_writer, sink->_profile, sink->_load_id);
             delta_writer->add_stream(stream);
             delta_writer_for_tablet.insert({ctx->tablet_id, delta_writer});
