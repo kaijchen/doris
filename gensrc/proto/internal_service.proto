@@ -709,6 +709,7 @@ message PStreamHeader {
     optional Opcode opcode = 5;
     optional bool is_last_segment = 6;
     optional string rowset_id = 7;
+    optional RowsetMetaPB rowset_meta = 8;
 }
 
 service PBackendService {
