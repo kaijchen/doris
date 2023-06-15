@@ -94,6 +94,38 @@ class TExpr;
 
 namespace stream_load {
 
+int StreamSinkHandler::on_received_messages(brpc::StreamId id, butil::IOBuf *const messages[], size_t size) {
+    // TODO: parse header from message
+    // <loadid, index, tablet, beid, status> = parseHdr(message);
+    int64_t partition_id = 0;
+    int64_t index_id = 0;
+    int64_t tablet_id = 0;
+    int64_t be_id = 0;
+    Status status = Status::OK();
+    int replica = 3;
+
+    auto key = TabletKey{partition_id, index_id, tablet_id};
+    if (status.ok()) {
+        if (_sink->tablet_success_map.count(key) == 0) {
+            _sink->tablet_success_map.insert({key, {}});
+        }
+        _sink->tablet_success_map[key].push_back(be_id);
+    } else {
+        if (_sink->tablet_error_map.count(key) == 0) {
+            _sink->tablet_error_map.insert({key, {}});
+        }
+        _sink->tablet_error_map[key].push_back(be_id);
+        if (_sink->tablet_error_map[key].size() * 2 >= replica) {
+            // TODO: cancel load
+        }
+    }
+    return 0;
+}
+
+void StreamSinkHandler::on_closed(brpc::StreamId id) {
+    _sink->all_stream_done_cv.notify_one();
+}
+
 VOlapTableSinkV2::VOlapTableSinkV2(ObjectPool* pool, const RowDescriptor& row_desc,
                                const std::vector<TExpr>& texprs, Status* status)
         : _pool(pool), _input_row_desc(row_desc), _filter_bitmap(1024) {
@@ -252,7 +284,7 @@ Status VOlapTableSinkV2::_init_stream_pool(StreamPool& stream_pool) {
         opt.max_buf_size = 20 << 20; // 20MB
         opt.idle_timeout_ms = 30000;
         opt.messages_in_batch = 128;
-        opt.handler = new StreamSinkHandler(_all_stream_done_cv);
+        opt.handler = new StreamSinkHandler(this);
         brpc::StreamId stream;
         brpc::Controller cntl;
         if (StreamCreate(&stream, cntl, &opt) != 0) {
@@ -483,8 +515,8 @@ Status VOlapTableSinkV2::close(RuntimeState* state, Status exec_status) {
         }
 
         {
-            std::unique_lock l(_all_stream_done_mutex);
-            _all_stream_done_cv.wait(l);
+            std::unique_lock l(all_stream_done_mutex);
+            all_stream_done_cv.wait(l);
         }
 
         // TODO: construct commitInfos from tablet_success_map
