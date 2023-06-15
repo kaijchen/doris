@@ -232,19 +232,17 @@ Status VOlapTableSinkV2::open(RuntimeState* state) {
     SCOPED_CONSUME_MEM_TRACKER(_mem_tracker.get());
 
     if (config::shared_delta_writer) {
-        auto& stream_pool = _state->exec_env()->stream_pool();
-        auto& stream_pool_mutex = _state->exec_env()->stream_pool_mutex();
-        std::lock_guard<std::mutex> l(stream_pool_mutex);
-        if (stream_pool.size() > 0) {
-            return Status::OK();
-        }
-        return _create_stream_pool(stream_pool);
+        RETURN_IF_ERROR(_state->exec_env()->get_stream_pool(
+                _load_id, _stream_pool,
+                [this](StreamPool& pool) { return _init_stream_pool(pool); }));
     } else {
-        return _create_stream_pool(_stream_pool);
+        _stream_pool = std::make_shared<StreamPool>();
+        RETURN_IF_ERROR(_init_stream_pool(*_stream_pool));
     }
+    return Status::OK();
 }
 
-Status VOlapTableSinkV2::_create_stream_pool(std::vector<brpc::StreamId>& stream_pool) {
+Status VOlapTableSinkV2::_init_stream_pool(StreamPool& stream_pool) {
     DCHECK_GT(config::stream_cnt_per_sink, 0);
     stream_pool.reserve(config::stream_cnt_per_sink);
     for (int i = 0; i < config::stream_cnt_per_sink; ++i) {
@@ -436,7 +434,6 @@ void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
     auto& delta_writer_for_tablet_mutex = config::shared_delta_writer
                                                   ? exec_env->delta_writer_for_tablet_mutex()
                                                   : sink->_delta_writer_for_tablet_mutex;
-    const auto& stream_pool = config::shared_delta_writer ? exec_env->stream_pool() : sink->_stream_pool;
     DeltaWriter* delta_writer = nullptr;
     {
         std::lock_guard<std::mutex> l(delta_writer_for_tablet_mutex);
@@ -459,7 +456,7 @@ void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
                     break;
                 }
             }
-            const brpc::StreamId& stream = stream_pool[sink->_stream_pool_index];
+            const brpc::StreamId& stream = sink->_stream_pool->at(sink->_stream_pool_index);
             sink->_stream_pool_index = (sink->_stream_pool_index + 1) % config::stream_cnt_per_sink;
             DeltaWriter::open(&wrequest, &delta_writer, sink->_profile, sink->_load_id);
             delta_writer->add_stream(stream);
@@ -489,7 +486,7 @@ Status VOlapTableSinkV2::close(RuntimeState* state, Status exec_status) {
 
         // TODO: update profile & metrics
 
-        for (const auto& stream_id : _stream_pool) {
+        for (const auto& stream_id : *_stream_pool) {
             brpc::StreamClose(stream_id);
         }
 

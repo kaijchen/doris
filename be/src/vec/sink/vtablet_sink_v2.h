@@ -264,7 +264,8 @@ public:
 
 private:
 
-    Status _create_stream_pool(std::vector<brpc::StreamId>& stream_pool);
+    using StreamPool = std::vector<brpc::StreamId>;
+    Status _init_stream_pool(StreamPool& stream_pool);
 
     // tuple<partition_id, index_id, tablet_id>
     using TabletKey = std::tuple<int64_t, int64_t, int64_t>;
@@ -417,7 +418,7 @@ private:
 
     std::unordered_set<int64_t> _opened_partitions;
 
-    std::vector<brpc::StreamId> _stream_pool;
+    std::shared_ptr<StreamPool> _stream_pool;
     int32_t _stream_pool_index = 0;
 
     std::atomic<int32_t> _flying_task_count {0};

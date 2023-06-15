@@ -20,6 +20,7 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -183,11 +184,25 @@ public:
         this->_stream_load_executor = stream_load_executor;
     }
 
-    std::vector<brpc::StreamId>& stream_pool() {
-        return _stream_pool;
-    }
-    std::mutex& stream_pool_mutex() {
-        return _stream_pool_mutex;
+    using StreamPool = std::vector<brpc::StreamId>;
+
+    Status get_stream_pool(const PUniqueId& load_id, std::shared_ptr<StreamPool>& stream_pool,
+                           std::function<Status(StreamPool&)> init) {
+        auto key = std::make_pair(load_id.hi(), load_id.lo());
+        std::lock_guard l(_stream_pool_mutex);
+
+        auto it = _stream_pools.find(key);
+        if (it != _stream_pools.end()) {
+            stream_pool = it->second.lock();
+            if (stream_pool) {
+                return Status::OK();
+            }
+        }
+
+        stream_pool = std::make_shared<std::vector<brpc::StreamId>>();
+        RETURN_IF_ERROR(init(*stream_pool));
+        _stream_pools.insert({key, stream_pool});
+        return Status::OK();
     }
 
     std::unordered_map<uint64_t, DeltaWriter*>& delta_writer_for_tablet() {
@@ -270,7 +285,7 @@ private:
 
     BlockSpillManager* _block_spill_mgr = nullptr;
 
-    std::vector<brpc::StreamId> _stream_pool;
+    std::unordered_map<std::pair<int64_t, int64_t>, std::weak_ptr<StreamPool>> _stream_pools;
     std::mutex _stream_pool_mutex;
     std::unordered_map<uint64_t, DeltaWriter*> _delta_writer_for_tablet;
     std::mutex _delta_writer_for_tablet_mutex;
