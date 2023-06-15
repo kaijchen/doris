@@ -296,9 +296,9 @@ Status VOlapTableSinkV2::_init_stream_pool(StreamPool& stream_pool) {
         const auto& node_info = _nodes_info->nodes_info().begin()->second;
         const auto& stub = _state->exec_env()->brpc_internal_client_cache()->get_client(
                 node_info.host, node_info.brpc_port);
-        PSegmentFlushRequest request;
-        PSegmentFlushResult response;
-        stub->segment_flush(&cntl, &request, &response, nullptr);
+        POpenStreamSinkRequest request;
+        POpenStreamSinkResponse response;
+        stub->open_stream_sink(&cntl, &request, &response, nullptr);
         if (cntl.Failed()) {
             LOG(ERROR) << "Fail to connect stream, " << cntl.ErrorText();
             return Status::RpcError("Failed to connect stream");

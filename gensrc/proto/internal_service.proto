@@ -71,16 +71,12 @@ message PTabletInfo {
     optional int64 received_rows = 4;
 }
 
-// flush a segment
-message PSegmentFlushRequest {
+// open stream sink
+message POpenStreamSinkRequest {
     optional PUniqueId id = 1;
-    optional int64 partition_id = 2;
-    optional int64 index_id = 3;
-    optional int64 tablet_id = 4;
-    optional bytes segment_data = 5;
 };
 
-message PSegmentFlushResult {
+message POpenStreamSinkResponse {
     optional PStatus status = 1;
 };
 
@@ -701,7 +697,7 @@ service PBackendService {
     rpc exec_plan_fragment_start(PExecPlanFragmentStartRequest) returns (PExecPlanFragmentResult);
     rpc cancel_plan_fragment(PCancelPlanFragmentRequest) returns (PCancelPlanFragmentResult);
     rpc fetch_data(PFetchDataRequest) returns (PFetchDataResult);
-    rpc segment_flush(PSegmentFlushRequest) returns (PSegmentFlushResult);
+    rpc open_stream_sink(POpenStreamSinkRequest) returns (POpenStreamSinkResponse);
     rpc tablet_writer_open(PTabletWriterOpenRequest) returns (PTabletWriterOpenResult);
     rpc open_partition(OpenPartitionRequest) returns (OpenPartitionResult);
     rpc tablet_writer_add_block(PTabletWriterAddBlockRequest) returns (PTabletWriterAddBlockResult);
