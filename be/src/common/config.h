@@ -777,6 +777,8 @@ DECLARE_mBool(runtime_filter_use_async_rpc);
 // if exceed, the value of send_batch_parallelism would be max_send_batch_parallelism_per_job
 DECLARE_mInt32(max_send_batch_parallelism_per_job);
 
+// whether to use OlapTableSinkV2
+DECLARE_Bool(experimental_olap_table_sink_v2);
 // number of brpc stream per OlapTableSinkV2
 DECLARE_Int32(stream_cnt_per_sink);
 // whether the DeltaWriters should be shared among OlapTableSinkV2

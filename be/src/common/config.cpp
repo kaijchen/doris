@@ -743,6 +743,8 @@ DEFINE_mInt32(max_send_batch_parallelism_per_job, "5");
 DEFINE_Validator(max_send_batch_parallelism_per_job,
                  [](const int config) -> bool { return config >= 1; });
 
+// whether to use OlapTableSinkV2
+DEFINE_Bool(experimental_olap_table_sink_v2, "false");
 // number of brpc stream per OlapTableSinkV2
 DEFINE_Int32(stream_cnt_per_sink, "1");
 // whether the DeltaWriters should be shared among OlapTableSinkV2
