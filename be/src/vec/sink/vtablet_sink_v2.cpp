@@ -519,9 +519,18 @@ Status VOlapTableSinkV2::close(RuntimeState* state, Status exec_status) {
             all_stream_done_cv.wait(l);
         }
 
-        // TODO: construct commitInfos from tablet_success_map
-        TTabletCommitInfo commitInfos;
-        state->tablet_commit_infos().push_back(commitInfos);
+        std::vector<TTabletCommitInfo> tablet_commit_infos;
+        for (auto& entry : tablet_success_map) {
+            for (int64_t be_id : entry.second) {
+                TTabletCommitInfo commit_info;
+                commit_info.tabletId = entry.first.tablet_id;
+                commit_info.backendId = be_id;
+                tablet_commit_infos.emplace_back(std::move(commit_info));
+            }
+        }
+        state->tablet_commit_infos().insert(state->tablet_commit_infos().end(),
+                                            std::make_move_iterator(tablet_commit_infos.begin()),
+                                            std::make_move_iterator(tablet_commit_infos.end()));
 
         // _number_input_rows don't contain num_rows_load_filtered and num_rows_load_unselected in scan node
         int64_t num_rows_load_total = _number_input_rows + state->num_rows_load_filtered() +
