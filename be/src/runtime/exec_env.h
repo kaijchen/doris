@@ -71,6 +71,21 @@ class ClientCache;
 class HeartbeatFlags;
 class FrontendServiceClient;
 
+namespace stream_load {
+struct TabletKey {
+    int64_t partition_id;
+    int64_t index_id;
+    int64_t tablet_id;
+    bool operator==(const TabletKey&) const = default;
+};
+
+struct TabletKeyHash {
+    std::size_t operator()(const TabletKey& k) const {
+        return (k.partition_id << 2) ^ (k.index_id << 1) ^ (k.tablet_id);
+    }
+};
+}
+
 // Execution environment for queries/plan fragments.
 // Contains all required global structures, and handles to
 // singleton services. Clients must call StartServices exactly
@@ -185,9 +200,13 @@ public:
     }
 
     using StreamPool = std::vector<brpc::StreamId>;
+    using DeltaWriterForTablet =
+            std::unordered_map<stream_load::TabletKey, DeltaWriter*, stream_load::TabletKeyHash>;
 
     Status get_stream_pool(const PUniqueId& load_id, std::shared_ptr<StreamPool>& stream_pool,
-                           std::function<Status(StreamPool&)> init) {
+                           std::shared_ptr<DeltaWriterForTablet>& delta_writer_for_tablet,
+                           std::shared_ptr<std::mutex>& delta_writer_for_tablet_mutex,
+                           std::function<Status(StreamPool&)> stream_pool_init) {
         auto key = std::make_pair(load_id.hi(), load_id.lo());
         std::lock_guard l(_stream_pool_mutex);
 
@@ -195,21 +214,20 @@ public:
         if (it != _stream_pools.end()) {
             stream_pool = it->second.lock();
             if (stream_pool) {
+                delta_writer_for_tablet = _delta_writer_for_tablet[key].lock();
+                delta_writer_for_tablet_mutex = _delta_writer_for_tablet_mutex[key].lock();
                 return Status::OK();
             }
         }
 
         stream_pool = std::make_shared<std::vector<brpc::StreamId>>();
-        RETURN_IF_ERROR(init(*stream_pool));
+        RETURN_IF_ERROR(stream_pool_init(*stream_pool));
+        delta_writer_for_tablet = std::make_shared<DeltaWriterForTablet>();
+        delta_writer_for_tablet_mutex = std::make_shared<std::mutex>();
         _stream_pools.insert({key, stream_pool});
+        _delta_writer_for_tablet.insert({key, delta_writer_for_tablet});
+        _delta_writer_for_tablet_mutex.insert({key, delta_writer_for_tablet_mutex});
         return Status::OK();
-    }
-
-    std::unordered_map<uint64_t, DeltaWriter*>& delta_writer_for_tablet() {
-        return _delta_writer_for_tablet;
-    }
-    std::mutex& delta_writer_for_tablet_mutex() {
-        return _delta_writer_for_tablet_mutex;
     }
 
 private:
@@ -285,10 +303,11 @@ private:
 
     BlockSpillManager* _block_spill_mgr = nullptr;
 
-    std::unordered_map<std::pair<int64_t, int64_t>, std::weak_ptr<StreamPool>> _stream_pools;
+    using LoadId = std::pair<int64_t, int64_t>;
     std::mutex _stream_pool_mutex;
-    std::unordered_map<uint64_t, DeltaWriter*> _delta_writer_for_tablet;
-    std::mutex _delta_writer_for_tablet_mutex;
+    std::unordered_map<LoadId, std::weak_ptr<StreamPool>> _stream_pools;
+    std::unordered_map<LoadId, std::weak_ptr<DeltaWriterForTablet>> _delta_writer_for_tablet;
+    std::unordered_map<LoadId, std::weak_ptr<std::mutex>> _delta_writer_for_tablet_mutex;
 };
 
 template <>

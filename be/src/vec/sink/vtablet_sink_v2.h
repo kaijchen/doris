@@ -197,9 +197,7 @@ using Payload = std::pair<std::unique_ptr<vectorized::IColumn::Selector>, std::v
 struct WriteMemtableTaskClosure {
     VOlapTableSinkV2* sink;
     const vectorized::Block* block;
-    const int64_t partition_id;
-    const int64_t index_id;
-    const int64_t tablet_id;
+    const TabletKey& tablet_key;
     const std::vector<int32_t>& row_idxes;
 };
 
@@ -266,14 +264,9 @@ private:
 
     using StreamPool = std::vector<brpc::StreamId>;
     Status _init_stream_pool(StreamPool& stream_pool);
+    using DeltaWriterForTablet =
+            std::unordered_map<stream_load::TabletKey, DeltaWriter*, stream_load::TabletKeyHash>;
 
-    // tuple<partition_id, index_id, tablet_id>
-    using TabletKey = std::tuple<int64_t, int64_t, int64_t>;
-    struct TabletKeyHash {
-        std::size_t operator()(const TabletKey& k) const {
-            return (std::get<0>(k) << 32) ^ (std::get<1>(k) << 16) ^ std::get<2>(k);
-        }
-    };
     // map<TabletKey, row_idxes>
     using RowsForTablet = std::unordered_map<TabletKey, std::vector<int32_t>, TabletKeyHash>;
 
@@ -419,12 +412,12 @@ private:
     std::unordered_set<int64_t> _opened_partitions;
 
     std::shared_ptr<StreamPool> _stream_pool;
-    int32_t _stream_pool_index = 0;
+    size_t _stream_pool_index = 0;
 
     std::atomic<int32_t> _flying_task_count {0};
 
-    std::unordered_map<uint64_t, DeltaWriter*> _delta_writer_for_tablet;
-    std::mutex _delta_writer_for_tablet_mutex;
+    std::shared_ptr<DeltaWriterForTablet> _delta_writer_for_tablet;
+    std::shared_ptr<std::mutex> _delta_writer_for_tablet_mutex;
 
     std::mutex _all_stream_done_mutex;
     std::condition_variable _all_stream_done_cv;
