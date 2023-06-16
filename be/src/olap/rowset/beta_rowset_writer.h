@@ -123,6 +123,8 @@ public:
 
     Status wait_flying_segcompaction() override;
 
+    void notify_last() override;
+
 private:
     Status _do_add_block(const vectorized::Block* block,
                          std::unique_ptr<segment_v2::SegmentWriter>* segment_writer,

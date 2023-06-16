@@ -713,6 +713,7 @@ Status BetaRowsetWriter::_do_create_segment_writer(
         return Status::Error<INIT_FAILED>();
     }
     io::FileWriterPtr file_writer;
+    // if config::experimental create stream sink writer
     Status st = fs->create_file(path, &file_writer);
     if (!st.ok()) {
         LOG(WARNING) << "failed to create writable file. path=" << path << ", err: " << st;
@@ -858,6 +859,23 @@ Status BetaRowsetWriter::flush_segment_writer_for_segcompaction(
     writer->reset();
 
     return Status::OK();
+}
+
+void BetaRowsetWriter::notify_last() {
+    if (config::experimental_olap_table_sink_v2) {
+        io::FileWriterPtr file_writer;
+        // TODO: create file_writer;
+        int32_t segment_id = allocate_segment_id();
+        segment_v2::SegmentWriterOptions writer_options;
+        writer_options.enable_unique_key_merge_on_write = _context.enable_unique_key_merge_on_write;
+        writer_options.rowset_ctx = &_context;
+        writer_options.write_type = _context.write_type;
+        _segment_writer.reset(new segment_v2::SegmentWriter(
+                file_writer.get(), segment_id, _context.tablet_schema, _context.tablet,
+                _context.data_dir, _context.max_rows_per_segment, writer_options,
+                _context.mow_context));
+        flush();
+    }
 }
 
 } // namespace doris
