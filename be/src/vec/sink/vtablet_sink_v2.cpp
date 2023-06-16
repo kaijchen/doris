@@ -369,28 +369,28 @@ Status VOlapTableSinkV2::send(RuntimeState* state, vectorized::Block* input_bloc
     DorisMetrics::instance()->load_rows->increment(rows);
     DorisMetrics::instance()->load_bytes->increment(bytes);
 
-    vectorized::Block block(input_block->get_columns_with_type_and_name());
+    auto block = vectorized::Block::create_unique(input_block->get_columns_with_type_and_name());
     if (!_output_vexpr_ctxs.empty()) {
         // Do vectorized expr here to speed up load
         RETURN_IF_ERROR(vectorized::VExprContext::get_output_block_after_execute_exprs(
-                _output_vexpr_ctxs, *input_block, &block));
+                _output_vexpr_ctxs, *input_block, block.get()));
     }
 
-    auto num_rows = block.rows();
+    auto num_rows = block->rows();
     int filtered_rows = 0;
     {
         SCOPED_RAW_TIMER(&_validate_data_ns);
-        _filter_bitmap.Reset(block.rows());
+        _filter_bitmap.Reset(block->rows());
         bool stop_processing = false;
         RETURN_IF_ERROR(
-                _validate_data(state, &block, &_filter_bitmap, &filtered_rows, &stop_processing));
+                _validate_data(state, block.get(), &_filter_bitmap, &filtered_rows, &stop_processing));
         _number_filtered_rows += filtered_rows;
         if (stop_processing) {
             // should be returned after updating "_number_filtered_rows", to make sure that load job can be cancelled
             // because of "data unqualified"
             return Status::EndOfFile("Encountered unqualified data, stop processing");
         }
-        _convert_to_dest_desc_block(&block);
+        _convert_to_dest_desc_block(block.get());
     }
 
     SCOPED_RAW_TIMER(&_send_data_ns);
@@ -409,7 +409,7 @@ Status VOlapTableSinkV2::send(RuntimeState* state, vectorized::Block* input_bloc
         const VOlapTablePartition* partition = nullptr;
         bool is_continue = false;
         uint32_t tablet_index = 0;
-        RETURN_IF_ERROR(find_tablet(state, &block, i, &partition, tablet_index, stop_processing,
+        RETURN_IF_ERROR(find_tablet(state, block.get(), i, &partition, tablet_index, stop_processing,
                                     is_continue));
         if (is_continue) {
             continue;
@@ -426,7 +426,7 @@ Status VOlapTableSinkV2::send(RuntimeState* state, vectorized::Block* input_bloc
         bthread_t th;
         auto closure = new WriteMemtableTaskClosure{};
         closure->sink = this;
-        closure->block = &block;
+        closure->block = std::move(block);
         closure->partition_id = entry.first.partition_id;
         closure->index_id = entry.first.index_id;
         closure->tablet_id = entry.first.tablet_id;
@@ -474,7 +474,7 @@ void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
             delta_writer = it->second;
         }
     }
-    auto st = delta_writer->write(ctx->block, *ctx->row_idxes, false);
+    auto st = delta_writer->write(ctx->block.get(), *ctx->row_idxes, false);
     sink->_flying_task_count--;
     delete ctx;
     DCHECK_EQ(st, Status::OK()) << "DeltaWriter::write failed";

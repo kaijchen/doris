@@ -91,7 +91,7 @@ using Payload = std::pair<std::unique_ptr<vectorized::IColumn::Selector>, std::v
 // pair<block,row_ids>
 struct WriteMemtableTaskClosure {
     VOlapTableSinkV2* sink;
-    const vectorized::Block* block;
+    std::unique_ptr<vectorized::Block> block;
     int64_t partition_id;
     int64_t index_id;
     int64_t tablet_id;
