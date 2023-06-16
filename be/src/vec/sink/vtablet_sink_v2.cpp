@@ -75,8 +75,6 @@ int StreamSinkHandler::on_received_messages(brpc::StreamId id, butil::IOBuf *con
         PWriteStreamSinkResponse response;
         response.ParseFromZeroCopyStream(&wrapper);
 
-        // TODO: find be_id
-        int64_t be_id = 0;
         // TODO: find replica num
         int replica = 3;
 
@@ -86,13 +84,13 @@ int StreamSinkHandler::on_received_messages(brpc::StreamId id, butil::IOBuf *con
             if (_sink->tablet_success_map.count(key) == 0) {
                 _sink->tablet_success_map.insert({key, {}});
             }
-            _sink->tablet_success_map[key].push_back(be_id);
+            _sink->tablet_success_map[key].push_back(response.backend_id());
         } else {
             LOG(WARNING) << "stream sink failed: " << response.error_msg();
             if (_sink->tablet_error_map.count(key) == 0) {
                 _sink->tablet_error_map.insert({key, {}});
             }
-            _sink->tablet_error_map[key].push_back(be_id);
+            _sink->tablet_error_map[key].push_back(response.backend_id());
             if (_sink->tablet_error_map[key].size() * 2 >= replica) {
                 // TODO: cancel load
             }
@@ -276,6 +274,8 @@ Status VOlapTableSinkV2::_init_stream_pool(StreamPool& stream_pool) {
         const auto& stub = _state->exec_env()->brpc_internal_client_cache()->get_client(
                 node_info.host, node_info.brpc_port);
         POpenStreamSinkRequest request;
+        request.set_allocated_id(&_load_id);
+        request.set_backend_id(node_info.id);
         POpenStreamSinkResponse response;
         stub->open_stream_sink(&cntl, &request, &response, nullptr);
         if (cntl.Failed()) {
