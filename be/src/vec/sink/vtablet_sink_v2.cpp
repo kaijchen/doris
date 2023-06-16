@@ -70,31 +70,32 @@ class TExpr;
 namespace stream_load {
 
 int StreamSinkHandler::on_received_messages(brpc::StreamId id, butil::IOBuf *const messages[], size_t size) {
-    // TODO: parse header from message
-    // <loadid, index, tablet, beid, status> = parseHdr(message);
-    // PStreamReply
-    int64_t index_id = 0;
-    int64_t tablet_id = 0;
-    int64_t be_id = 0;
-    bool success = true;
-    std::string error_msg;
-    int replica = 3;
+    for (size_t i = 0; i < size; i++) {
+        butil::IOBufAsZeroCopyInputStream wrapper(*messages[i]);
+        PWriteStreamSinkResponse response;
+        response.ParseFromZeroCopyStream(&wrapper);
 
-    auto key = std::make_pair(tablet_id, index_id);
+        // TODO: find be_id
+        int64_t be_id = 0;
+        // TODO: find replica num
+        int replica = 3;
 
-    if (success) {
-        if (_sink->tablet_success_map.count(key) == 0) {
-            _sink->tablet_success_map.insert({key, {}});
-        }
-        _sink->tablet_success_map[key].push_back(be_id);
-    } else {
-        LOG(WARNING) << "stream sink failed: " << error_msg;
-        if (_sink->tablet_error_map.count(key) == 0) {
-            _sink->tablet_error_map.insert({key, {}});
-        }
-        _sink->tablet_error_map[key].push_back(be_id);
-        if (_sink->tablet_error_map[key].size() * 2 >= replica) {
-            // TODO: cancel load
+        auto key = std::make_pair(response.index_id(), response.tablet_id());
+
+        if (response.success()) {
+            if (_sink->tablet_success_map.count(key) == 0) {
+                _sink->tablet_success_map.insert({key, {}});
+            }
+            _sink->tablet_success_map[key].push_back(be_id);
+        } else {
+            LOG(WARNING) << "stream sink failed: " << response.error_msg();
+            if (_sink->tablet_error_map.count(key) == 0) {
+                _sink->tablet_error_map.insert({key, {}});
+            }
+            _sink->tablet_error_map[key].push_back(be_id);
+            if (_sink->tablet_error_map[key].size() * 2 >= replica) {
+                // TODO: cancel load
+            }
         }
     }
     return 0;
