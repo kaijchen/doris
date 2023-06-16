@@ -495,9 +495,13 @@ Status VOlapTableSinkV2::close(RuntimeState* state, Status exec_status) {
 
         // TODO: update profile & metrics
 
-        for (const auto& stream_id : *_stream_pool) {
-            brpc::StreamClose(stream_id);
+        // TODO: FIXME: fix concurrency issue here
+        if (_stream_pool.use_count() == 1) {
+            for (const auto& stream_id : *_stream_pool) {
+                brpc::StreamClose(stream_id);
+            }
         }
+        _stream_pool.reset();
 
         // TODO: wait all replies
 
