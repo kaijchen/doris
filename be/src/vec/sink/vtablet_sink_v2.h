@@ -92,8 +92,10 @@ using Payload = std::pair<std::unique_ptr<vectorized::IColumn::Selector>, std::v
 struct WriteMemtableTaskClosure {
     VOlapTableSinkV2* sink;
     const vectorized::Block* block;
-    const TabletKey& tablet_key;
-    const std::vector<int32_t>& row_idxes;
+    int64_t partition_id;
+    int64_t index_id;
+    int64_t tablet_id;
+    const std::vector<int32_t>* row_idxes;
 };
 
 class StreamSinkHandler: public brpc::StreamInputHandler {
@@ -136,17 +138,30 @@ public:
     // Returns the runtime profile for the sink.
     RuntimeProfile* profile() override { return _profile; }
 
+    using TabletID = std::pair<int64_t, int64_t>; // <tablet_id, index_id>
     std::mutex all_stream_done_mutex;
     std::condition_variable all_stream_done_cv;
-    std::unordered_map<TabletKey, std::vector<int64_t>, TabletKeyHash> tablet_error_map;
-    std::unordered_map<TabletKey, std::vector<int64_t>, TabletKeyHash> tablet_success_map;
+    std::unordered_map<TabletID, std::vector<int64_t>> tablet_error_map;
+    std::unordered_map<TabletID, std::vector<int64_t>> tablet_success_map;
 
 private:
 
     using StreamPool = std::vector<brpc::StreamId>;
     Status _init_stream_pool(StreamPool& stream_pool);
-    using DeltaWriterForTablet =
-            std::unordered_map<stream_load::TabletKey, DeltaWriter*, stream_load::TabletKeyHash>;
+    using DeltaWriterForTablet = std::unordered_map<TabletID, DeltaWriter*>;
+
+    struct TabletKey {
+        int64_t partition_id;
+        int64_t index_id;
+        int64_t tablet_id;
+        bool operator==(const TabletKey&) const = default;
+    };
+
+    struct TabletKeyHash {
+        std::size_t operator()(const TabletKey& k) const {
+            return (k.partition_id << 2) ^ (k.index_id << 1) ^ (k.tablet_id);
+        }
+    };
 
     // map<TabletKey, row_idxes>
     using RowsForTablet = std::unordered_map<TabletKey, std::vector<int32_t>, TabletKeyHash>;

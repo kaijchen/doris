@@ -39,7 +39,6 @@
 #include "exec/tablet_info.h"
 #include "olap/delta_writer.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/thread_context.h"
 #include "service/brpc.h"
@@ -73,20 +72,23 @@ namespace stream_load {
 int StreamSinkHandler::on_received_messages(brpc::StreamId id, butil::IOBuf *const messages[], size_t size) {
     // TODO: parse header from message
     // <loadid, index, tablet, beid, status> = parseHdr(message);
-    int64_t partition_id = 0;
+    // PStreamReply
     int64_t index_id = 0;
     int64_t tablet_id = 0;
     int64_t be_id = 0;
-    Status status = Status::OK();
+    bool success = true;
+    std::string error_msg;
     int replica = 3;
 
-    auto key = TabletKey{partition_id, index_id, tablet_id};
-    if (status.ok()) {
+    auto key = std::make_pair(tablet_id, index_id);
+
+    if (success) {
         if (_sink->tablet_success_map.count(key) == 0) {
             _sink->tablet_success_map.insert({key, {}});
         }
         _sink->tablet_success_map[key].push_back(be_id);
     } else {
+        LOG(WARNING) << "stream sink failed: " << error_msg;
         if (_sink->tablet_error_map.count(key) == 0) {
             _sink->tablet_error_map.insert({key, {}});
         }
@@ -422,7 +424,13 @@ Status VOlapTableSinkV2::send(RuntimeState* state, vectorized::Block* input_bloc
     // For each tablet, send its rows from block to delta writer
     for (const auto& entry : rows_for_tablet) {
         bthread_t th;
-        auto closure = new WriteMemtableTaskClosure {this, &block, entry.first, entry.second};
+        auto closure = new WriteMemtableTaskClosure{};
+        closure->sink = this;
+        closure->block = &block;
+        closure->partition_id = entry.first.partition_id;
+        closure->index_id = entry.first.index_id;
+        closure->tablet_id = entry.first.tablet_id;
+        closure->row_idxes = &entry.second;
         _flying_task_count++;
         bthread_start_background(&th, nullptr, _write_memtable_task, closure);
     }
@@ -437,12 +445,13 @@ void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
     DeltaWriter* delta_writer = nullptr;
     {
         std::lock_guard<std::mutex> l(*sink->_delta_writer_for_tablet_mutex);
-        auto it = sink->_delta_writer_for_tablet->find(ctx->tablet_key);
+        auto key = std::make_pair(ctx->tablet_id, ctx->index_id);
+        auto it = sink->_delta_writer_for_tablet->find(key);
         if (it == sink->_delta_writer_for_tablet->end()) {
             WriteRequest wrequest;
-            wrequest.partition_id = ctx->tablet_key.partition_id;
-            wrequest.index_id = ctx->tablet_key.index_id;
-            wrequest.tablet_id = ctx->tablet_key.tablet_id;
+            wrequest.partition_id = ctx->partition_id;
+            wrequest.index_id = ctx->index_id;
+            wrequest.tablet_id = ctx->tablet_id;
             wrequest.write_type = WriteType::LOAD;
             wrequest.txn_id = sink->_txn_id;
             wrequest.load_id = sink->_load_id;
@@ -450,7 +459,7 @@ void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
             wrequest.is_high_priority = sink->_is_high_priority;
             wrequest.table_schema_param = sink->_schema.get();
             for (auto& index : sink->_schema->indexes()) {
-                if (index->index_id == ctx->tablet_key.index_id) {
+                if (index->index_id == ctx->index_id) {
                     wrequest.slots = &index->slots;
                     wrequest.schema_hash = index->schema_hash;
                     break;
@@ -460,12 +469,12 @@ void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
             sink->_stream_pool_index = (sink->_stream_pool_index + 1) % sink->_stream_pool->size();
             DeltaWriter::open(&wrequest, &delta_writer, sink->_profile, sink->_load_id);
             delta_writer->add_stream(stream);
-            sink->_delta_writer_for_tablet->insert({ctx->tablet_key, delta_writer});
+            sink->_delta_writer_for_tablet->insert({key, delta_writer});
         } else {
             delta_writer = it->second;
         }
     }
-    auto st = delta_writer->write(ctx->block, ctx->row_idxes, false);
+    auto st = delta_writer->write(ctx->block, *ctx->row_idxes, false);
     sink->_flying_task_count--;
     delete ctx;
     DCHECK_EQ(st, Status::OK()) << "DeltaWriter::write failed";
@@ -490,6 +499,8 @@ Status VOlapTableSinkV2::close(RuntimeState* state, Status exec_status) {
             brpc::StreamClose(stream_id);
         }
 
+        // TODO: wait all replies
+
         {
             std::unique_lock l(all_stream_done_mutex);
             all_stream_done_cv.wait(l);
@@ -499,7 +510,7 @@ Status VOlapTableSinkV2::close(RuntimeState* state, Status exec_status) {
         for (auto& entry : tablet_success_map) {
             for (int64_t be_id : entry.second) {
                 TTabletCommitInfo commit_info;
-                commit_info.tabletId = entry.first.tablet_id;
+                commit_info.tabletId = entry.first.first;
                 commit_info.backendId = be_id;
                 tablet_commit_infos.emplace_back(std::move(commit_info));
             }

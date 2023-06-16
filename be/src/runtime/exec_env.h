@@ -71,21 +71,6 @@ class ClientCache;
 class HeartbeatFlags;
 class FrontendServiceClient;
 
-namespace stream_load {
-struct TabletKey {
-    int64_t partition_id;
-    int64_t index_id;
-    int64_t tablet_id;
-    bool operator==(const TabletKey&) const = default;
-};
-
-struct TabletKeyHash {
-    std::size_t operator()(const TabletKey& k) const {
-        return (k.partition_id << 2) ^ (k.index_id << 1) ^ (k.tablet_id);
-    }
-};
-}
-
 // Execution environment for queries/plan fragments.
 // Contains all required global structures, and handles to
 // singleton services. Clients must call StartServices exactly
@@ -200,8 +185,8 @@ public:
     }
 
     using StreamPool = std::vector<brpc::StreamId>;
-    using DeltaWriterForTablet =
-            std::unordered_map<stream_load::TabletKey, DeltaWriter*, stream_load::TabletKeyHash>;
+    using TabletID = std::pair<int64_t, int64_t>; // <tablet_id, index_id>
+    using DeltaWriterForTablet = std::unordered_map<TabletID, DeltaWriter*>;
 
     Status get_stream_pool(const PUniqueId& load_id, std::shared_ptr<StreamPool>& stream_pool,
                            std::shared_ptr<DeltaWriterForTablet>& delta_writer_for_tablet,
