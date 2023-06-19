@@ -393,6 +393,7 @@ Status DeltaWriter::close() {
     }
 
     auto s = _flush_memtable_async();
+    _rowset_writer->notify_last();
     _mem_table.reset();
     _is_closed = true;
     if (UNLIKELY(!s.ok())) {
