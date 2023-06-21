@@ -172,6 +172,7 @@ public:
 
         _env = doris::ExecEnv::GetInstance();
         _env->set_storage_engine(z_engine);
+        _env->_sink_stream_mgr = new SinkStreamMgr();
 
         EXPECT_TRUE(io::global_local_filesystem()->create_directory(zTestDir).ok());
 
