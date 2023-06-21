@@ -19,7 +19,10 @@
 #include "util/uid_util.h"
 #include "common/config.h"
 #include <runtime/exec_env.h>
+#include <olap/storage_engine.h>
 #include <olap/rowset/rowset_meta.h>
+#include <olap/rowset/rowset_factory.h>
+#include <olap/tablet_manager.h>
 
 namespace doris {
 
@@ -167,7 +170,9 @@ uint64_t SinkStreamHandler::get_next_segmentid(TargetRowsetPtr target_rowset, in
 }
 
 Status SinkStreamHandler::_build_rowset(TargetRowsetPtr target_rowset, const RowsetMetaPB& rowset_meta_pb) {
-    RowsetMetaSharedPtr rowset_meta_ptr(new RowsetMeta());
+    RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(  //TODO
+            rowset_meta_pb.tablet_id(), rowset_meta_pb.tablet_schema_hash());
     std::string rowset_meta_str;
     bool ret = rowset_meta_pb.SerializeToString(&rowset_meta_str);
     if (!ret) {
@@ -177,7 +182,11 @@ Status SinkStreamHandler::_build_rowset(TargetRowsetPtr target_rowset, const Row
                      << ", txn_id=" << rowset_meta_pb.txn_id();
         return Status::InternalError("failed to parse rowset meta pb sent by sink");
     }
-    bool parsed = rowset_meta_ptr->init(rowset_meta_str);
+
+    bool parsed = rowset_meta->init(rowset_meta_str);
+    RowsetId new_rowset_id = StorageEngine::instance()->next_rowset_id();
+    rowset_meta->set_rowset_id(new_rowset_id);
+    rowset_meta->set_tablet_uid(tablet->tablet_uid());
     if (!parsed) {
         LOG(WARNING) << "failed to init rowset meta "
                      << "rowset_id=" << rowset_meta_pb.rowset_id()
@@ -186,8 +195,18 @@ Status SinkStreamHandler::_build_rowset(TargetRowsetPtr target_rowset, const Row
         return Status::InternalError("failed to init rowset meta");
     }
 
+    RowsetSharedPtr rowset;
+    Status create_status = RowsetFactory::create_rowset(
+            tablet->tablet_schema(), tablet->tablet_path(), rowset_meta, &rowset);
+    if (!create_status) {
+        LOG(WARNING) << "failed to create rowset "
+                     << "rowset_id=" << rowset_meta_pb.rowset_id()
+                     << ", tablet_id=" << rowset_meta_pb.tablet_id()
+                     << ", txn_id=" << rowset_meta_pb.txn_id();
+        return Status::InternalError("failed to create rowset");
+    }
 
-    return Status::InternalError("build rowset failed");
+    return Status::OK();
 }
 
 void SinkStreamHandler::_handle_message(StreamId stream, PStreamHeader hdr,
