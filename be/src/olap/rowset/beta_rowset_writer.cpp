@@ -883,35 +883,24 @@ Status BetaRowsetWriter::flush_segment_writer_for_segcompaction(
 }
 
 void BetaRowsetWriter::notify_last() {
-    // TODO: remove return
-    return;
-    if (config::experimental_olap_table_sink_v2) {
-        io::FileWriterPtr file_writer;
-
-        int32_t segment_id = _next_segment_id.load();
-        std::string path = BetaRowset::segment_file_path(_context.rowset_dir, _context.rowset_id, segment_id);
-        auto index_id = _index_id;
-        auto tablet_id = _rowset_meta->tablet_id();
-        auto load_id = _rowset_meta->load_id();
-        auto rowset_id = _rowset_meta->rowset_id();
-        auto stream_id = *_streams.begin();
-
-        auto stream_writer = std::make_unique<io::StreamSinkFileWriter>(stream_id);
-        stream_writer->init(path, load_id, index_id, tablet_id, rowset_id, segment_id, true);
-        file_writer = std::move(stream_writer);
-
-        segment_v2::SegmentWriterOptions writer_options;
-        writer_options.enable_unique_key_merge_on_write = _context.enable_unique_key_merge_on_write;
-        writer_options.rowset_ctx = &_context;
-        writer_options.write_type = _context.write_type;
-        _segment_writer.reset(new segment_v2::SegmentWriter(
-                file_writer.get(), segment_id, _context.tablet_schema, _context.tablet,
-                _context.data_dir, _context.max_rows_per_segment, writer_options,
-                _context.mow_context));
-        
-        // TODO: flush will be ignored because block is empty?
-        flush();
+    if (!config::experimental_olap_table_sink_v2) {
+        return;
     }
+
+    int32_t segment_id = _next_segment_id.load();
+    std::string path = BetaRowset::segment_file_path(_context.rowset_dir, _context.rowset_id, segment_id);
+    auto index_id = _index_id;
+    auto tablet_id = _rowset_meta->tablet_id();
+    auto load_id = _rowset_meta->load_id();
+    auto rowset_id = _rowset_meta->rowset_id();
+    auto stream_id = *_streams.begin();
+
+    LOG(INFO) << "notifying last segment";
+    auto stream_writer = std::make_unique<io::StreamSinkFileWriter>(stream_id);
+    stream_writer->init(path, load_id, index_id, tablet_id, rowset_id, segment_id, true);
+
+    RowsetMetaPB rowset_meta = _rowset_meta->get_rowset_pb();
+    stream_writer->finalize(&rowset_meta);
 }
 
 } // namespace doris

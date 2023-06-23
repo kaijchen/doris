@@ -398,7 +398,6 @@ Status DeltaWriter::close() {
     }
 
     auto s = _flush_memtable_async();
-    _rowset_writer->notify_last();
     _mem_table.reset();
     _is_closed = true;
     if (UNLIKELY(!s.ok())) {
@@ -431,6 +430,7 @@ Status DeltaWriter::close_wait(const PSlaveTabletNodes& slave_tablet_nodes,
     }
 
     _mem_table.reset();
+    _rowset_writer->notify_last();
 
     if (_rowset_writer->num_rows() + _memtable_stat.merged_rows != _total_received_rows) {
         LOG(WARNING) << "the rows number written doesn't match, rowset num rows written to file: "

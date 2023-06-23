@@ -39,7 +39,9 @@ public:
 
     Status appendv(const Slice* data, size_t data_cnt) override;
 
-    Status finalize() override;
+    Status finalize() override { return finalize(nullptr); }
+
+    Status finalize(RowsetMetaPB* rowset_meta);
 
     Status close() override;
 
