@@ -101,6 +101,11 @@ int StreamSinkHandler::on_received_messages(brpc::StreamId id, butil::IOBuf* con
         PWriteStreamSinkResponse response;
         response.ParseFromZeroCopyStream(&wrapper);
 
+        LOG(INFO) << "received write stream sink response, success(" << response.success()
+                  << "), error_msg(" << response.error_msg() << "), tablet_id("
+                  << response.tablet_id() << "), index_id(" << response.index_id()
+                  << "), backend_id(" << response.backend_id() << ")";
+
         // TODO: get replica num
         int replica = 1;
 
