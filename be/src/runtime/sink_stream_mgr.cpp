@@ -118,21 +118,22 @@ Status SinkStreamHandler::_close_file(TargetSegmentPtr target_segment, bool is_l
     return Status::OK();
 }
 
-void SinkStreamHandler::_report_status(StreamId stream, TargetRowsetPtr target_rowset, int is_success, std::string error_msg) {
+void SinkStreamHandler::_report_status(StreamId stream, TargetRowsetPtr target_rowset, bool is_success, std::string error_msg) {
     LOG(INFO) << "OOXXOO report status " << is_success << " " << error_msg;
-    std::shared_ptr<butil::IOBuf> buf = std::make_shared<butil::IOBuf>();
+    butil::IOBuf buf;
     PWriteStreamSinkResponse response;
     response.set_success(is_success);
     response.set_error_msg(error_msg);
     response.set_index_id(target_rowset->indexid);
     response.set_tablet_id(target_rowset->tabletid);
-    int ret = brpc::StreamWrite(stream, *buf);
+    buf.append(response.SerializeAsString());
+    int ret = brpc::StreamWrite(stream, buf);
     if (ret == EAGAIN) {
-        std::cerr << "OOXXOO report status EAGAIN" << std::endl;
+        LOG(WARNING) << "OOXXOO report status EAGAIN";
     } else if (ret == EINVAL) {
-        std::cerr << "OOXXOO report status EINVAL" << std::endl;
+        LOG(WARNING) << "OOXXOO report status EINVAL";
     } else {
-        std::cerr << "OOXXOO report status " << ret << std::endl;
+        LOG(INFO) << "OOXXOO report status " << ret;
     }
 }
 
@@ -209,7 +210,7 @@ void SinkStreamHandler::_handle_message(StreamId stream, PStreamHeader hdr,
             DCHECK(hdr.has_rowset_meta());
             s = _build_rowset(target_rowset, hdr.rowset_meta());
             if (s.ok()) {
-                return _report_status(stream, target_rowset, s.ok(), s.to_string());
+                return _report_status(stream, target_rowset, true, s.to_string());
             }
         }
         break;
@@ -220,7 +221,7 @@ void SinkStreamHandler::_handle_message(StreamId stream, PStreamHeader hdr,
         LOG(WARNING) << "Failed to handle " << PStreamHeader_Opcode_Name(hdr.opcode())
                      << " message in stream (" << stream << "), target segment ("
                      << target_segment->to_string() << "), reason: " << s.to_string();
-        _report_status(stream, target_rowset, s.code(), s.to_string());
+        _report_status(stream, target_rowset, false, s.to_string());
     }
 }
 
