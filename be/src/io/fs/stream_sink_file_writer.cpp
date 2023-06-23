@@ -30,6 +30,10 @@ StreamSinkFileWriter::~StreamSinkFileWriter() {}
 
 Status StreamSinkFileWriter::init(Path path, PUniqueId load_id, int64_t index_id, int64_t tablet_id,
                                   RowsetId rowset_id, int32_t segment_id, bool is_last_segment) {
+    LOG(INFO) << "init stream writer, path(" << path << "), load id(" << UniqueId(load_id).to_string()
+              << "), index id(" << index_id << "), tablet_id(" << tablet_id << "), rowset id("
+              << rowset_id.to_string() << "), segment_id(" << segment_id << "), last segment("
+              << is_last_segment << ")";
     _path = path;
     _load_id = load_id;
     _index_id = index_id;
@@ -40,9 +44,21 @@ Status StreamSinkFileWriter::init(Path path, PUniqueId load_id, int64_t index_id
 
     butil::IOBuf buf;
     PStreamHeader header;
+    header.set_allocated_load_id(&_load_id);
+    header.set_index_id(_index_id);
+    header.set_tablet_id(_tablet_id);
+    header.set_rowset_id(_rowset_id.to_string());
+    header.set_segment_id(_segment_id);
+    header.set_is_last_segment(_is_last_segment);
     header.set_opcode(PStreamHeader::OPEN_FILE);
+    size_t header_len = header.ByteSizeLong();
+
+    buf.append(reinterpret_cast<uint8_t*>(&header_len), sizeof(header_len));
+    buf.append(header.SerializeAsString());
     buf.append(path);
-    return _stream_sender(buf);
+    Status status = _stream_sender(buf);
+    header.release_load_id();
+    return status;
 }
 
 Status StreamSinkFileWriter::appendv(const Slice* data, size_t data_cnt) {

@@ -85,7 +85,7 @@ private:
     std::map<TargetRowsetPtr, size_t, TargetRowsetComparator> _tablet_segment_next_id;
     std::mutex _tablet_segment_next_id_lock;
     // TODO: make it per load
-    std::map<TargetSegmentPtr, std::shared_ptr<ThreadPoolToken>> _segment_token_map; // accessed in single thread, safe
+    std::map<TargetSegmentPtr, std::shared_ptr<ThreadPoolToken>, TargetSegmentComparator> _segment_token_map; // accessed in single thread, safe
 };
 
 // managing stream_id allocation and release

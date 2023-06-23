@@ -24,26 +24,33 @@
 namespace doris {
 
 bool TargetSegmentComparator::operator()(const TargetSegmentPtr& lhs, const TargetSegmentPtr& rhs) const {
-    if (lhs->target_rowset != rhs->target_rowset) {
-        return false;
+    TargetRowsetComparator rowset_cmp;
+    auto less = rowset_cmp.operator()(lhs->target_rowset, rhs->target_rowset);
+    auto greater = rowset_cmp.operator()(rhs->target_rowset, lhs->target_rowset);
+    // if rowset not equal
+    if (less || greater) {
+        return less;
     }
     if (lhs->segmentid != rhs->segmentid) {
-        return false;
+        return lhs->segmentid < rhs->segmentid;
     }
-    return true;
+    return false;
 }
 
 bool TargetRowsetComparator::operator()(const TargetRowsetPtr& lhs, const TargetRowsetPtr& rhs) const {
-    if (lhs->loadid.hi != rhs->loadid.hi || lhs->loadid.lo != rhs->loadid.lo) {
-        return false;
+    if (lhs->loadid.hi != rhs->loadid.hi) {
+        return lhs->loadid.hi < rhs->loadid.hi;
+    }
+    if (lhs->loadid.lo != rhs->loadid.lo) {
+        return lhs->loadid.lo < rhs->loadid.lo;
     }
     if (lhs->indexid != rhs->indexid) {
-        return false;
+        return lhs->indexid < rhs->indexid;
     }
     if (lhs->tabletid != rhs->tabletid) {
-        return false;
+        return lhs->tabletid < rhs->tabletid;
     }
-    return true;
+    return false;
 }
 
 std::string TargetRowset::to_string() {
@@ -210,7 +217,9 @@ void SinkStreamHandler::_handle_message(StreamId stream, PStreamHeader hdr,
         DCHECK(false);
     }
     if (!s.ok()) {
-        LOG(WARNING) << "streaming error! streamid = " << stream << "msg:" << s.to_string();
+        LOG(WARNING) << "Failed to handle " << PStreamHeader_Opcode_Name(hdr.opcode())
+                     << " message in stream (" << stream << "), target segment ("
+                     << target_segment->to_string() << "), reason: " << s.to_string();
         _report_status(stream, target_rowset, s.code(), s.to_string());
     }
 }
