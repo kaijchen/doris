@@ -155,11 +155,6 @@ public:
     // Returns the runtime profile for the sink.
     RuntimeProfile* profile() override { return _profile; }
 
-    std::mutex all_stream_done_mutex;
-    std::condition_variable all_stream_done_cv;
-    std::unordered_map<TabletID, std::vector<int64_t>> tablet_error_map;
-    std::unordered_map<TabletID, std::vector<int64_t>> tablet_success_map;
-
 private:
     Status _init_stream_pool(StreamPool& stream_pool);
 
@@ -310,6 +305,13 @@ private:
     std::vector<bthread_t> _write_memtable_threads;
     std::atomic<int32_t> _flying_task_count {0};
     std::atomic<int32_t> _flying_memtable_count {0};
+
+    std::unordered_map<TabletID, std::vector<int64_t>> _tablet_success_map;
+    std::unordered_map<TabletID, std::vector<int64_t>> _tablet_failure_map;
+    bthread::Mutex _tablet_success_map_mutex;
+    bthread::Mutex _tablet_failure_map_mutex;
+
+    friend class StreamSinkHandler;
 };
 
 } // namespace stream_load

@@ -112,17 +112,19 @@ int StreamSinkHandler::on_received_messages(brpc::StreamId id, butil::IOBuf* con
         auto key = std::make_pair(response.index_id(), response.tablet_id());
 
         if (response.success()) {
-            if (_sink->tablet_success_map.count(key) == 0) {
-                _sink->tablet_success_map.insert({key, {}});
+            std::lock_guard<bthread::Mutex> l(_sink->_tablet_success_map_mutex);
+            if (_sink->_tablet_success_map.count(key) == 0) {
+                _sink->_tablet_success_map.insert({key, {}});
             }
-            _sink->tablet_success_map[key].push_back(response.backend_id());
+            _sink->_tablet_success_map[key].push_back(response.backend_id());
         } else {
             LOG(WARNING) << "stream sink failed: " << response.error_msg();
-            if (_sink->tablet_error_map.count(key) == 0) {
-                _sink->tablet_error_map.insert({key, {}});
+            std::lock_guard<bthread::Mutex> l(_sink->_tablet_failure_map_mutex);
+            if (_sink->_tablet_failure_map.count(key) == 0) {
+                _sink->_tablet_failure_map.insert({key, {}});
             }
-            _sink->tablet_error_map[key].push_back(response.backend_id());
-            if (_sink->tablet_error_map[key].size() * 2 >= replica) {
+            _sink->_tablet_failure_map[key].push_back(response.backend_id());
+            if (_sink->_tablet_failure_map[key].size() * 2 >= replica) {
                 // TODO: _sink->cancel();
             }
         }
@@ -131,7 +133,6 @@ int StreamSinkHandler::on_received_messages(brpc::StreamId id, butil::IOBuf* con
 }
 
 void StreamSinkHandler::on_closed(brpc::StreamId id) {
-    _sink->all_stream_done_cv.notify_one();
 }
 
 VOlapTableSinkV2::VOlapTableSinkV2(ObjectPool* pool, const RowDescriptor& row_desc,
@@ -545,12 +546,7 @@ Status VOlapTableSinkV2::close(RuntimeState* state, Status exec_status) {
         }
         _delta_writer_for_tablet.reset();
 
-
         // TODO: wait all stream replies
-        //{
-        //    std::unique_lock lock(all_stream_done_mutex);
-        //    all_stream_done_cv.wait(lock);
-        //}
 
         // close streams
         if (_stream_pool.use_count() == 1) {
@@ -561,7 +557,7 @@ Status VOlapTableSinkV2::close(RuntimeState* state, Status exec_status) {
         _stream_pool.reset();
 
         std::vector<TTabletCommitInfo> tablet_commit_infos;
-        for (auto& entry : tablet_success_map) {
+        for (auto& entry : _tablet_success_map) {
             for (int64_t be_id : entry.second) {
                 TTabletCommitInfo commit_info;
                 commit_info.tabletId = entry.first.first;
