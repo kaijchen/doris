@@ -448,6 +448,7 @@ Status VOlapTableSinkV2::send(RuntimeState* state, vectorized::Block* input_bloc
         closure->index_id = entry.first.index_id;
         closure->tablet_id = entry.first.tablet_id;
         closure->row_idxes = entry.second;
+        _opened_tablets.insert(std::make_pair(closure->tablet_id, closure->index_id));
         auto cnt = _flying_task_count.fetch_add(1) + 1;
         DLOG(INFO) << "Creating WriteMemtableTask for Tablet(tablet id: " << closure->tablet_id
                   << ", index id: " << closure->index_id << "), flying task count: " << cnt;
@@ -543,23 +544,24 @@ Status VOlapTableSinkV2::close(RuntimeState* state, Status exec_status) {
                 entry.second->close_wait(PSlaveTabletNodes {}, false);
             }
         }
+        _delta_writer_for_tablet.reset();
 
-        for (const auto& entry : *_delta_writer_for_tablet) {
+        for (const auto& tablet : _opened_tablets) {
             bool should_wait = true;
             while (should_wait) {
                 int success_replicas;
                 int failed_replicas;
                 {
                     std::lock_guard<bthread::Mutex> l(_tablet_success_map_mutex);
-                    success_replicas = _tablet_success_map[entry.first].size();
+                    success_replicas = _tablet_success_map[tablet].size();
                 }
                 {
                     std::lock_guard<bthread::Mutex> l(_tablet_failure_map_mutex);
-                    failed_replicas = _tablet_failure_map[entry.first].size();
+                    failed_replicas = _tablet_failure_map[tablet].size();
                 }
                 LOG(INFO) << "expected " << _num_replicas
-                          << " replicas for tablet [tablet id: " << entry.first.first
-                          << ", index id: " << entry.first.second << "], got " << success_replicas
+                          << " replicas for tablet [tablet id: " << tablet.first
+                          << ", index id: " << tablet.second << "], got " << success_replicas
                           << " success replicas, " << failed_replicas << " failed replicas";
                 should_wait = success_replicas + failed_replicas < _num_replicas &&
                               failed_replicas * 2 < _num_replicas;
@@ -569,8 +571,6 @@ Status VOlapTableSinkV2::close(RuntimeState* state, Status exec_status) {
                 }
             }
         }
-
-        _delta_writer_for_tablet.reset();
 
         // close streams
         if (_stream_pool.use_count() == 1) {
