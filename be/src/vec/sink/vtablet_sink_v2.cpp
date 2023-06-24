@@ -109,7 +109,7 @@ int StreamSinkHandler::on_received_messages(brpc::StreamId id, butil::IOBuf* con
         // TODO: get replica num
         int replica = 1;
 
-        auto key = std::make_pair(response.index_id(), response.tablet_id());
+        auto key = std::make_pair(response.tablet_id(), response.index_id());
 
         if (response.success()) {
             std::lock_guard<bthread::Mutex> l(_sink->_tablet_success_map_mutex);
@@ -544,9 +544,35 @@ Status VOlapTableSinkV2::close(RuntimeState* state, Status exec_status) {
                 entry.second->close_wait(PSlaveTabletNodes {}, false);
             }
         }
-        _delta_writer_for_tablet.reset();
 
-        // TODO: wait all stream replies
+        int expected_replicas = 1;
+        for (const auto& entry : *_delta_writer_for_tablet) {
+            bool should_wait = true;
+            while (should_wait) {
+                int success_replicas;
+                int failed_replicas;
+                {
+                    std::lock_guard<bthread::Mutex> l(_tablet_success_map_mutex);
+                    success_replicas = _tablet_success_map[entry.first].size();
+                }
+                {
+                    std::lock_guard<bthread::Mutex> l(_tablet_failure_map_mutex);
+                    failed_replicas = _tablet_failure_map[entry.first].size();
+                }
+                LOG(INFO) << "expected " << expected_replicas
+                          << " replicas for tablet [tablet id: " << entry.first.first
+                          << ", index id: " << entry.first.second << "], got " << success_replicas
+                          << " success replicas, " << failed_replicas << " failed replicas";
+                should_wait = success_replicas + failed_replicas < expected_replicas &&
+                              failed_replicas * 2 < expected_replicas;
+                if (should_wait) {
+                    // TODO: use a better wait
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                }
+            }
+        }
+
+        _delta_writer_for_tablet.reset();
 
         // close streams
         if (_stream_pool.use_count() == 1) {
