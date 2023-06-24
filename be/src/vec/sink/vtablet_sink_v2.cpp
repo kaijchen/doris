@@ -106,8 +106,7 @@ int StreamSinkHandler::on_received_messages(brpc::StreamId id, butil::IOBuf* con
                   << response.tablet_id() << "), index_id(" << response.index_id()
                   << "), backend_id(" << response.backend_id() << ")";
 
-        // TODO: get replica num
-        int replica = 1;
+        int replica = _sink->_num_replicas;
 
         auto key = std::make_pair(response.tablet_id(), response.index_id());
 
@@ -545,7 +544,6 @@ Status VOlapTableSinkV2::close(RuntimeState* state, Status exec_status) {
             }
         }
 
-        int expected_replicas = 1;
         for (const auto& entry : *_delta_writer_for_tablet) {
             bool should_wait = true;
             while (should_wait) {
@@ -559,12 +557,12 @@ Status VOlapTableSinkV2::close(RuntimeState* state, Status exec_status) {
                     std::lock_guard<bthread::Mutex> l(_tablet_failure_map_mutex);
                     failed_replicas = _tablet_failure_map[entry.first].size();
                 }
-                LOG(INFO) << "expected " << expected_replicas
+                LOG(INFO) << "expected " << _num_replicas
                           << " replicas for tablet [tablet id: " << entry.first.first
                           << ", index id: " << entry.first.second << "], got " << success_replicas
                           << " success replicas, " << failed_replicas << " failed replicas";
-                should_wait = success_replicas + failed_replicas < expected_replicas &&
-                              failed_replicas * 2 < expected_replicas;
+                should_wait = success_replicas + failed_replicas < _num_replicas &&
+                              failed_replicas * 2 < _num_replicas;
                 if (should_wait) {
                     // TODO: use a better wait
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
