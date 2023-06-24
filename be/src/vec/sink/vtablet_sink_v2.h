@@ -306,6 +306,8 @@ private:
     std::atomic<int32_t> _flying_task_count {0};
     std::atomic<int32_t> _flying_memtable_count {0};
 
+    std::unordered_set<TabletID> _opened_tablets;
+
     std::unordered_map<TabletID, std::vector<int64_t>> _tablet_success_map;
     std::unordered_map<TabletID, std::vector<int64_t>> _tablet_failure_map;
     bthread::Mutex _tablet_success_map_mutex;
