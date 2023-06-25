@@ -64,7 +64,7 @@ Status StreamSinkFileWriter::init(PUniqueId load_id, int64_t index_id, int64_t t
 Status StreamSinkFileWriter::appendv(const Slice* data, size_t data_cnt) {
     LOG(INFO) << "writer appendv, load_id: " << UniqueId(_load_id).to_string()
               << ", index_id: " << _index_id << ", tablet_id: " << _tablet_id
-              << ", segment_id: " << _segment_id << ", size = " << data_cnt;
+              << ", segment_id: " << _segment_id << ", slice_cnt: " << data_cnt;
     butil::IOBuf buf;
     PStreamHeader header;
     header.set_allocated_load_id(&_load_id);
