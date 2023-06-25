@@ -67,6 +67,7 @@
 #include "vec/core/block.h"
 #include "vec/data_types/data_type.h"
 #include "vec/exprs/vexpr_fwd.h"
+#include "runtime/vtablet_sink_v2_mgr.h"
 
 namespace doris {
 class DeltaWriter;
@@ -151,14 +152,6 @@ public:
 
     Status close(RuntimeState* state, Status close_status) override;
     Status send(RuntimeState* state, vectorized::Block* block, bool eos = false) override;
-
-    int64_t mem_consumption();
-
-    int64_t get_active_memtable_mem_consumption_snap();
-
-    void flush_memtable_async();
-
-    void wait_flush();
 
     const RowDescriptor& row_desc() { return _input_row_desc; }
 
@@ -328,7 +321,7 @@ private:
 
     friend class StreamSinkHandler;
 
-    SpinLock _lock;
+    VOlapTableSinkV2Mgr* _table_sink_v2_mgr = nullptr;
 };
 
 } // namespace stream_load

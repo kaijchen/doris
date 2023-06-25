@@ -32,6 +32,7 @@
 #include "util/threadpool.h"
 
 namespace doris {
+class VOlapTableSinkV2Mgr;
 namespace vectorized {
 class VDataStreamMgr;
 class ScannerScheduler;
@@ -189,6 +190,8 @@ public:
 
     SinkStreamMgr* get_sink_stream_mgr() { return _sink_stream_mgr; }
 
+    VOlapTableSinkV2Mgr* get_table_sink_v2_mgr() { return _table_sink_v2_mgr; }
+
 private:
     Status _init(const std::vector<StorePath>& store_paths);
     void _destroy();
@@ -265,6 +268,7 @@ private:
     // To save meta info of external file, such as parquet footer.
     FileMetaCache* _file_meta_cache = nullptr;
     SinkStreamMgr* _sink_stream_mgr = nullptr;
+    VOlapTableSinkV2Mgr* _table_sink_v2_mgr = nullptr;
 };
 
 template <>

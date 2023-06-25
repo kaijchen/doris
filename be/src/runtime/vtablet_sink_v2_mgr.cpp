@@ -52,7 +52,17 @@ Status VOlapTableSinkV2Mgr::init(int64_t process_mem_limit) {
     return Status::OK();
 }
 
-void VOlapTableSinkV2Mgr::_handle_memtable_flush() {
+void VOlapTableSinkV2Mgr::register_writer(std::shared_ptr<DeltaWriter> writer) {
+    std::lock_guard<SpinLock> l(_writer_lock);
+    _writers.insert(writer);
+}
+
+void VOlapTableSinkV2Mgr::deregister_writer(std::shared_ptr<DeltaWriter> writer) {
+    std::lock_guard<SpinLock> l(_writer_lock);
+    _writers.erase(writer);
+}
+
+void VOlapTableSinkV2Mgr::handle_memtable_flush() {
     // Check the soft limit.
     DCHECK(_load_soft_mem_limit > 0);
     // Record current memory status.
@@ -68,8 +78,8 @@ void VOlapTableSinkV2Mgr::_handle_memtable_flush() {
     }
     // Indicate whether current thread is reducing mem on hard limit.
     bool reducing_mem_on_hard_limit = false;
-    // tuple<VOlapTableSinkV2, mem_size>
-    std::vector<std::tuple<std::shared_ptr<stream_load::VOlapTableSinkV2>, int64_t>>
+    // tuple<DeltaWriter, mem_size>
+    std::vector<std::tuple<std::shared_ptr<DeltaWriter>, int64_t>>
             writers_to_reduce_mem;
     {
         MonotonicStopWatch timer;
@@ -89,32 +99,31 @@ void VOlapTableSinkV2Mgr::_handle_memtable_flush() {
             return;
         }
 
-        // tuple<VOlapTableSinkV2, mem size>
-        using WriterMemItem = std::tuple<std::shared_ptr<stream_load::VOlapTableSinkV2>, int64_t>;
+        // tuple<DeltaWriter, mem size>
+        using WriterMemItem = std::tuple<std::shared_ptr<DeltaWriter>, int64_t>;
         auto cmp = [](WriterMemItem& lhs, WriterMemItem& rhs) {
             return std::get<1>(lhs) > std::get<1>(rhs);
         };
-        std::priority_queue<WriterMemItem, std::vector<WriterMemItem>, decltype(cmp)> sink_mem_heap(
+        std::priority_queue<WriterMemItem, std::vector<WriterMemItem>, decltype(cmp)> mem_heap(
                 cmp);
 
-        // todo:register sinks
-        for (auto& sink : _sinks) {
-            int64_t active_memtable_mem = sink->get_active_memtable_mem_consumption_snap();
-            sink_mem_heap.emplace(sink, active_memtable_mem);
+        for (auto& writer : _writers) {
+            int64_t active_memtable_mem = writer->active_memtable_mem_consumption();
+            mem_heap.emplace(writer, active_memtable_mem);
         }
         int64_t mem_to_flushed = _mem_tracker->consumption() / 10;
         int64_t mem_consumption_in_picked_writer = 0;
-        while (!sink_mem_heap.empty()) {
-            WriterMemItem mem_item = sink_mem_heap.top();
-            auto sink = std::get<0>(mem_item);
+        while (!mem_heap.empty()) {
+            WriterMemItem mem_item = mem_heap.top();
+            auto writer = std::get<0>(mem_item);
             int64_t mem_size = std::get<1>(mem_item);
-            writers_to_reduce_mem.emplace_back(sink, mem_size);
-            sink->flush_memtable_async();
+            writers_to_reduce_mem.emplace_back(writer, mem_size);
+            writer->flush_memtable_and_wait(false);
             mem_consumption_in_picked_writer += std::get<1>(mem_item);
             if (mem_consumption_in_picked_writer > mem_to_flushed) {
                 break;
             }
-            sink_mem_heap.pop();
+            mem_heap.pop();
         }
 
         if (writers_to_reduce_mem.empty()) {
@@ -181,8 +190,8 @@ void VOlapTableSinkV2Mgr::_handle_memtable_flush() {
 
 void VOlapTableSinkV2Mgr::_refresh_mem_tracker_without_lock() {
     int64_t mem_usage = 0;
-    for (auto& sink : _sinks) {
-        mem_usage += sink->mem_consumption();
+    for (auto& writer : _writers) {
+        mem_usage += writer->mem_consumption(MemType::ALL);
     }
     THREAD_MEM_TRACKER_TRANSFER_TO(mem_usage - _mem_tracker->consumption(), _mem_tracker.get());
 }

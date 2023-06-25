@@ -80,6 +80,7 @@
 #include "util/threadpool.h"
 #include "vec/exec/scan/scanner_scheduler.h"
 #include "vec/runtime/vdata_stream_mgr.h"
+#include "runtime/vtablet_sink_v2_mgr.h"
 
 #if !defined(__SANITIZE_ADDRESS__) && !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && \
         !defined(THREAD_SANITIZER) && !defined(USE_JEMALLOC)
@@ -167,6 +168,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _block_spill_mgr = new BlockSpillManager(_store_paths);
     _file_meta_cache = new FileMetaCache(config::max_external_file_meta_cache_num);
     _sink_stream_mgr = new SinkStreamMgr();
+    _table_sink_v2_mgr = new VOlapTableSinkV2Mgr();
 
     _backend_client_cache->init_metrics("backend");
     _frontend_client_cache->init_metrics("frontend");

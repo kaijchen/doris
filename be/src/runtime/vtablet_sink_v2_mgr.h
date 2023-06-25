@@ -5,7 +5,7 @@
 #include "common/status.h"
 #include "runtime/memory/mem_tracker_limiter.h"
 #include "util/countdown_latch.h"
-#include "vec/sink/vtablet_sink_v2.h"
+#include "olap/delta_writer.h"
 
 namespace doris {
 class VOlapTableSinkV2Mgr {
@@ -15,11 +15,15 @@ public:
 
     Status init(int64_t process_mem_limit);
 
-private:
     // check if the total mem consumption exceeds limit.
     // If yes, it will flush memtable to try to reduce memory consumption.
-    void _handle_memtable_flush();
+    void handle_memtable_flush();
 
+    void register_writer(std::shared_ptr<DeltaWriter> writer);
+
+    void deregister_writer(std::shared_ptr<DeltaWriter> writer);
+
+private:
     void _refresh_mem_tracker_without_lock();
 
     std::mutex _lock;
@@ -33,6 +37,8 @@ private:
     int64_t _load_soft_mem_limit = -1;
     bool _soft_reduce_mem_in_progress = false;
 
-    std::vector<std::shared_ptr<stream_load::VOlapTableSinkV2>> _sinks;
+    std::unordered_set<std::shared_ptr<DeltaWriter>> _writers;
+
+    SpinLock _writer_lock;
 };
 } // namespace doris
