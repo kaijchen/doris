@@ -73,7 +73,7 @@ private:
     Status _append_data(TargetSegmentPtr target_segment, std::shared_ptr<butil::IOBuf> message);
     Status _close_file(TargetSegmentPtr target_segment, bool is_last_segment);
     void _report_status(StreamId stream, TargetRowsetPtr target_rowset, bool is_success, std::string error_msg);
-    uint64_t get_next_segmentid(TargetRowsetPtr target_rowset, int64_t segmentid, bool is_open);
+    uint64_t get_next_segmentid(TargetRowsetPtr target_rowset);
     Status _build_rowset(TargetRowsetPtr target_rowset, const RowsetMetaPB& rowset_meta);
 
 private:
@@ -86,6 +86,8 @@ private:
     std::mutex _tablet_segment_next_id_lock;
     // TODO: make it per load
     std::map<TargetSegmentPtr, std::shared_ptr<ThreadPoolToken>, TargetSegmentComparator> _segment_token_map; // accessed in single thread, safe
+    std::map<TargetSegmentPtr, TargetSegmentPtr, TargetSegmentComparator> _rawsegment_finalsegment_map;
+    std::mutex _rawsegment_finalsegment_map_lock;
 };
 
 // managing stream_id allocation and release
