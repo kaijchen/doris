@@ -708,6 +708,7 @@ message PStreamHeader {
     optional bool is_last_segment = 6;
     optional string rowset_id = 7;
     optional RowsetMetaPB rowset_meta = 8;
+    optional int32 tablet_schema_hash = 9;
 }
 
 service PBackendService {

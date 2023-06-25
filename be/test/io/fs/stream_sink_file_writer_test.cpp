@@ -159,7 +159,7 @@ TEST_F(StreamSinkFileWriterTest, TestInit) {
     load_id.set_lo(1);
     RowsetId rowset_id;
     rowset_id.init("1");
-    CHECK_STATUS_OK(writer.init("test", load_id, 1, 1, rowset_id, 1, true));
+    CHECK_STATUS_OK(writer.init(load_id, 1, 1, rowset_id, 1, true, 123));
 }
 
 TEST_F(StreamSinkFileWriterTest, TestAppend) {
@@ -169,7 +169,7 @@ TEST_F(StreamSinkFileWriterTest, TestAppend) {
     load_id.set_lo(1);
     RowsetId rowset_id;
     rowset_id.init("1");
-    CHECK_STATUS_OK(writer.init("test", load_id, 1, 1, rowset_id, 1, true));
+    CHECK_STATUS_OK(writer.init(load_id, 1, 1, rowset_id, 1, true, 123));
     strcpy(_buffer, "hello");
     _data->data = _buffer;
     CHECK_STATUS_OK(writer.appendv(_data, 6));
@@ -182,7 +182,7 @@ TEST_F(StreamSinkFileWriterTest, TestFinalize) {
     load_id.set_lo(1);
     RowsetId rowset_id;
     rowset_id.init("1");
-    CHECK_STATUS_OK(writer.init("test", load_id, 1, 1, rowset_id, 1, true));
+    CHECK_STATUS_OK(writer.init(load_id, 1, 1, rowset_id, 1, true, 123));
     CHECK_STATUS_OK(writer.finalize());
 }
 

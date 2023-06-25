@@ -220,9 +220,20 @@ void SinkStreamHandler::_handle_message(StreamId stream, PStreamHeader hdr,
                                         std::shared_ptr<butil::IOBuf> message) {
     Status s = Status::OK();
     std::string path;
+    TabletSharedPtr tablet = nullptr;
     switch(hdr.opcode()) {
     case PStreamHeader::OPEN_FILE:
+#ifndef BE_TEST
+        DCHECK(hdr.has_tablet_id() && hdr.has_tablet_schema_hash() && hdr.has_rowset_id());
+        tablet = StorageEngine::instance()->tablet_manager()->get_tablet(
+                hdr.tablet_id(), hdr.tablet_schema_hash());
+        path = fmt::format("{}/{}_{}.dat", tablet->tablet_path(), hdr.rowset_id(),
+                           target_segment->segmentid);
+#else
+        // in UT, we encode path directly behind header
+        (void)tablet;
         path = message->to_string();
+#endif
         s = _create_and_open_file(target_segment, path);
         break;
     case PStreamHeader::APPEND_DATA:
@@ -232,10 +243,12 @@ void SinkStreamHandler::_handle_message(StreamId stream, PStreamHeader hdr,
         s = _close_file(target_segment, hdr.is_last_segment());
         if (hdr.has_is_last_segment() && hdr.is_last_segment()) {
             DCHECK(hdr.has_rowset_meta());
+#ifndef BE_TEST
             s = _build_rowset(target_rowset, hdr.rowset_meta());
             if (s.ok()) {
                 return _report_status(stream, target_rowset, true, s.to_string());
             }
+#endif
         }
         break;
     default:
