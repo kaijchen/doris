@@ -24,6 +24,7 @@
 #include "util/threadpool.h"
 #include "olap/olap_common.h"
 #include <gen_cpp/internal_service.pb.h>
+#include <io/fs/local_file_writer.h>
 
 namespace doris {
 using namespace brpc;
@@ -79,7 +80,7 @@ private:
 private:
     std::unique_ptr<ThreadPool> _workers;
     // TODO: make it per load
-    std::map<TargetSegmentPtr, std::shared_ptr<std::ofstream>, TargetSegmentComparator> _file_map;
+    std::map<TargetSegmentPtr, std::shared_ptr<io::LocalFileWriter>, TargetSegmentComparator> _file_map;
     std::mutex _file_map_lock;
     // TODO: make it per load
     std::map<TargetRowsetPtr, size_t, TargetRowsetComparator> _tablet_segment_next_id;

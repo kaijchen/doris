@@ -84,11 +84,14 @@ SinkStreamHandler::~SinkStreamHandler() {
 Status SinkStreamHandler::_create_and_open_file(TargetSegmentPtr target_segment, std::string path) {
     LOG(INFO) << "create and open file, target_segment = " << target_segment->to_string()
               << ", path = " << path;
-    std::shared_ptr<std::ofstream> file = std::make_shared<std::ofstream>();
-    file->open(path.c_str(), std::ios::out | std::ios::app);
+    int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+    if (fd < 0) {
+        return Status::InternalError("open file error");
+    }
+    std::shared_ptr<io::LocalFileWriter> file_writer = std::make_shared<io::LocalFileWriter>(path, fd);
     {
         std::lock_guard<std::mutex> l(_file_map_lock);
-        _file_map[target_segment] = file; // TODO: better not so global
+        _file_map[target_segment] = file_writer; // TODO: better not so global
     }
     return Status::OK();
 }
@@ -104,24 +107,26 @@ Status SinkStreamHandler::_append_data(TargetSegmentPtr target_segment, std::sha
     if (itr == _file_map.end()) {
         return Status::InternalError("file not found");
     }
-    *(itr->second) << message->to_string();
+    std::shared_ptr<io::LocalFileWriter> file_writer = (itr->second);
+    file_writer->append(message->to_string());
     return Status::OK();
 }
 
 Status SinkStreamHandler::_close_file(TargetSegmentPtr target_segment, bool is_last_segment) {
     LOG(INFO) << "close file, target_segment = " << target_segment->to_string()
               << ", is last segment = " << is_last_segment;
-    std::shared_ptr<std::ofstream> file = nullptr;
+    std::shared_ptr<io::LocalFileWriter> file_writer = nullptr;
     {
         std::lock_guard<std::mutex> l(_file_map_lock);
         auto itr = _file_map.find(target_segment);
         if (itr == _file_map.end()) {
             return Status::InternalError("close file error");
         }
-        file = itr->second;
+        file_writer = itr->second;
         _file_map.erase(itr);
     }
-    file->close();
+    file_writer->finalize();
+    file_writer->close();
     LOG(INFO) << "OOXXOO close file, is_last_segment = " << is_last_segment << " ";
     return Status::OK();
 }
