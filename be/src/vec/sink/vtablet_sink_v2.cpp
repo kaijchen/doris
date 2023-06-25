@@ -96,15 +96,17 @@ namespace stream_load {
 
 int StreamSinkHandler::on_received_messages(brpc::StreamId id, butil::IOBuf* const messages[],
                                             size_t size) {
+    int64_t backend_id = _sink->_node_id_for_stream->at(id);
+
     for (size_t i = 0; i < size; i++) {
         butil::IOBufAsZeroCopyInputStream wrapper(*messages[i]);
         PWriteStreamSinkResponse response;
         response.ParseFromZeroCopyStream(&wrapper);
 
-        LOG(INFO) << "received write stream sink response, success(" << response.success()
-                  << "), error_msg(" << response.error_msg() << "), tablet_id("
-                  << response.tablet_id() << "), index_id(" << response.index_id()
-                  << "), backend_id(" << response.backend_id() << ")";
+        LOG(INFO) << "received write stream sink response from backend " << backend_id
+                  << ", success(" << response.success() << "), error_msg(" << response.error_msg()
+                  << "), tablet_id(" << response.tablet_id() << "), index_id("
+                  << response.index_id() << ")";
 
         int replica = _sink->_num_replicas;
 
@@ -115,14 +117,14 @@ int StreamSinkHandler::on_received_messages(brpc::StreamId id, butil::IOBuf* con
             if (_sink->_tablet_success_map.count(key) == 0) {
                 _sink->_tablet_success_map.insert({key, {}});
             }
-            _sink->_tablet_success_map[key].push_back(response.backend_id());
+            _sink->_tablet_success_map[key].push_back(backend_id);
         } else {
             LOG(WARNING) << "stream sink failed: " << response.error_msg();
             std::lock_guard<bthread::Mutex> l(_sink->_tablet_failure_map_mutex);
             if (_sink->_tablet_failure_map.count(key) == 0) {
                 _sink->_tablet_failure_map.insert({key, {}});
             }
-            _sink->_tablet_failure_map[key].push_back(response.backend_id());
+            _sink->_tablet_failure_map[key].push_back(backend_id);
             if (_sink->_tablet_failure_map[key].size() * 2 >= replica) {
                 // TODO: _sink->cancel();
             }
@@ -252,18 +254,22 @@ Status VOlapTableSinkV2::open(RuntimeState* state) {
     SCOPED_CONSUME_MEM_TRACKER(_mem_tracker.get());
 
     _stream_pool_for_node = std::make_shared<StreamPoolForNode>();
+    _node_id_for_stream = std::make_shared<NodeIdForStream>();
     _delta_writer_for_tablet = std::make_shared<DeltaWriterForTablet>();
     _delta_writer_for_tablet_mutex = std::make_shared<bthread::Mutex>();
-    RETURN_IF_ERROR(_init_stream_pools(*_stream_pool_for_node));
+    RETURN_IF_ERROR(_init_stream_pools());
 
     return Status::OK();
 }
 
-Status VOlapTableSinkV2::_init_stream_pools(StreamPoolForNode& stream_pool_for_node) {
+Status VOlapTableSinkV2::_init_stream_pools() {
     for (auto& entry : _nodes_info->nodes_info()) {
-        stream_pool_for_node.insert({entry.first, StreamPool {}});
-        StreamPool& stream_pool = stream_pool_for_node[entry.first];
+        _stream_pool_for_node->insert({entry.first, StreamPool {}});
+        StreamPool& stream_pool = _stream_pool_for_node->at(entry.first);
         RETURN_IF_ERROR(_init_stream_pool(entry.second, stream_pool));
+        for (auto stream : stream_pool) {
+            _node_id_for_stream->insert({stream, entry.first});
+        }
     }
     return Status::OK();
 }
@@ -289,7 +295,6 @@ Status VOlapTableSinkV2::_init_stream_pool(const NodeInfo& node_info, StreamPool
                 node_info.host, node_info.brpc_port);
         POpenStreamSinkRequest request;
         request.set_allocated_id(&_load_id);
-        request.set_backend_id(node_info.id);
         POpenStreamSinkResponse response;
         stub->open_stream_sink(&cntl, &request, &response, nullptr);
         request.release_id();

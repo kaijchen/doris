@@ -99,6 +99,7 @@ using TabletID = std::pair<int64_t, int64_t>;
 using DeltaWriterForTablet = std::unordered_map<TabletID, std::unique_ptr<DeltaWriter>>;
 using StreamPool = std::vector<brpc::StreamId>;
 using StreamPoolForNode = std::unordered_map<int64_t, StreamPool>;
+using NodeIdForStream = std::unordered_map<brpc::StreamId, int64_t>;
 
 class StreamSinkHandler : public brpc::StreamInputHandler {
 public:
@@ -159,7 +160,7 @@ public:
 private:
     Status _init_stream_pool(const NodeInfo& node_info, StreamPool& stream_pool);
 
-    Status _init_stream_pools(StreamPoolForNode& stream_pool_for_node);
+    Status _init_stream_pools();
 
     void _generate_rows_for_tablet(RowsForTablet& rows_for_tablet,
                                    const VOlapTablePartition* partition, uint32_t tablet_index,
@@ -302,6 +303,7 @@ private:
     std::unordered_set<int64_t> _opened_partitions;
 
     std::shared_ptr<StreamPoolForNode> _stream_pool_for_node;
+    std::shared_ptr<NodeIdForStream> _node_id_for_stream;
     size_t _stream_pool_index = 0;
     std::shared_ptr<DeltaWriterForTablet> _delta_writer_for_tablet;
     std::shared_ptr<bthread::Mutex> _delta_writer_for_tablet_mutex;

@@ -681,7 +681,6 @@ message PGetTabletVersionsResponse {
 // open stream sink
 message POpenStreamSinkRequest {
     optional PUniqueId id = 1;
-    optional int64 backend_id = 2 [default = -1];
 };
 
 message POpenStreamSinkResponse {
@@ -693,7 +692,6 @@ message PWriteStreamSinkResponse {
     optional string error_msg = 2;
     optional int64 index_id = 3;
     optional int64 tablet_id = 4;
-    optional int64 backend_id = 5;
 };
 
 message PStreamHeader {
