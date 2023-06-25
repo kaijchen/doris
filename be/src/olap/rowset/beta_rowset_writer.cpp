@@ -888,7 +888,6 @@ void BetaRowsetWriter::notify_last() {
     }
 
     int32_t segment_id = _next_segment_id.load();
-    // std::string path = BetaRowset::segment_file_path(_context.rowset_dir, _context.rowset_id, segment_id);
     auto index_id = _index_id;
     auto tablet_id = _rowset_meta->tablet_id();
     auto load_id = _rowset_meta->load_id();
