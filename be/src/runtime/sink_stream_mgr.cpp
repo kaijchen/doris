@@ -82,7 +82,8 @@ SinkStreamHandler::~SinkStreamHandler() {
 }
 
 Status SinkStreamHandler::_create_and_open_file(TargetSegmentPtr target_segment, std::string path) {
-    LOG(INFO) << "create and open file, path = " << path;
+    LOG(INFO) << "create and open file, target_segment = " << target_segment->to_string()
+              << ", path = " << path;
     std::shared_ptr<std::ofstream> file = std::make_shared<std::ofstream>();
     file->open(path.c_str(), std::ios::out | std::ios::app);
     {
@@ -93,6 +94,8 @@ Status SinkStreamHandler::_create_and_open_file(TargetSegmentPtr target_segment,
 }
 
 Status SinkStreamHandler::_append_data(TargetSegmentPtr target_segment, std::shared_ptr<butil::IOBuf> message) {
+    LOG(INFO) << "append data, target_segment = " << target_segment->to_string()
+              << ", data length = " << message->length();
     auto itr = _file_map.end();
     {
         std::lock_guard<std::mutex> l(_file_map_lock);
@@ -106,6 +109,8 @@ Status SinkStreamHandler::_append_data(TargetSegmentPtr target_segment, std::sha
 }
 
 Status SinkStreamHandler::_close_file(TargetSegmentPtr target_segment, bool is_last_segment) {
+    LOG(INFO) << "close file, target_segment = " << target_segment->to_string()
+              << ", is last segment = " << is_last_segment;
     std::shared_ptr<std::ofstream> file = nullptr;
     {
         std::lock_guard<std::mutex> l(_file_map_lock);
