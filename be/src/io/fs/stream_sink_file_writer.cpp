@@ -78,7 +78,10 @@ Status StreamSinkFileWriter::appendv(const Slice* data, size_t data_cnt) {
 
     buf.append(reinterpret_cast<uint8_t*>(&header_len), sizeof(header_len));
     buf.append(header.SerializeAsString());
-    buf.append_user_data((void*)data->get_data(), data_cnt, deleter);
+    for (int i = 0; i < data_cnt; i++) {
+        buf.append_user_data(const_cast<void*>(static_cast<const void*>(data[i].get_data())),
+                             data[i].get_size(), deleter);
+    }
     Status status = _stream_sender(buf);
     header.release_load_id();
     return status;
