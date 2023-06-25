@@ -70,7 +70,7 @@ private:
     void _handle_message(StreamId id, PStreamHeader hdr, TargetRowsetPtr rowset,
                          TargetSegmentPtr segment, std::shared_ptr<butil::IOBuf> message);
     void _parse_header(butil::IOBuf *const message, PStreamHeader& hdr);
-    Status _create_and_open_file(TargetSegmentPtr target_segment, std::string path);
+    Status _create_and_open_file(TargetSegmentPtr target_segment, std::string path, bool is_last);
     Status _append_data(TargetSegmentPtr target_segment, std::shared_ptr<butil::IOBuf> message);
     Status _close_file(TargetSegmentPtr target_segment, bool is_last_segment);
     void _report_status(StreamId stream, TargetRowsetPtr target_rowset, bool is_success, std::string error_msg);

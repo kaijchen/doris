@@ -81,9 +81,13 @@ SinkStreamHandler::~SinkStreamHandler() {
     }
 }
 
-Status SinkStreamHandler::_create_and_open_file(TargetSegmentPtr target_segment, std::string path) {
+Status SinkStreamHandler::_create_and_open_file(TargetSegmentPtr target_segment, std::string path,
+                                                bool is_last) {
     LOG(INFO) << "create and open file, target_segment = " << target_segment->to_string()
-              << ", path = " << path;
+              << ", path = " << path << ", is_last = " << is_last;
+    if (is_last) {
+        return Status::OK(); //last segment works as a signal, no need to create file
+    }
     int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
     if (fd < 0) {
         return Status::InternalError("open file error");
@@ -115,6 +119,9 @@ Status SinkStreamHandler::_append_data(TargetSegmentPtr target_segment, std::sha
 Status SinkStreamHandler::_close_file(TargetSegmentPtr target_segment, bool is_last_segment) {
     LOG(INFO) << "close file, target_segment = " << target_segment->to_string()
               << ", is last segment = " << is_last_segment;
+    if (is_last_segment) {
+        return Status::OK();
+    }
     std::shared_ptr<io::LocalFileWriter> file_writer = nullptr;
     {
         std::lock_guard<std::mutex> l(_file_map_lock);
@@ -225,6 +232,12 @@ void SinkStreamHandler::_handle_message(StreamId stream, PStreamHeader hdr,
     Status s = Status::OK();
     std::string path;
     TabletSharedPtr tablet = nullptr;
+    bool is_last = false;
+
+    if (hdr.has_is_last_segment() && hdr.is_last_segment()) {
+        is_last = true;
+    }
+
     switch(hdr.opcode()) {
     case PStreamHeader::OPEN_FILE:
 #ifndef BE_TEST
@@ -238,14 +251,14 @@ void SinkStreamHandler::_handle_message(StreamId stream, PStreamHeader hdr,
         (void)tablet;
         path = message->to_string();
 #endif
-        s = _create_and_open_file(target_segment, path);
+        s = _create_and_open_file(target_segment, path, is_last);
         break;
     case PStreamHeader::APPEND_DATA:
         s= _append_data(target_segment, message);
         break;
     case PStreamHeader::CLOSE_FILE:
-        s = _close_file(target_segment, hdr.is_last_segment());
-        if (hdr.has_is_last_segment() && hdr.is_last_segment()) {
+        s = _close_file(target_segment, is_last);
+        if (is_last) {
             DCHECK(hdr.has_rowset_meta());
 #ifndef BE_TEST
             s = _build_rowset(target_rowset, hdr.rowset_meta());
