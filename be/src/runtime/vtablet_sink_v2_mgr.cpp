@@ -53,12 +53,12 @@ Status VOlapTableSinkV2Mgr::init(int64_t process_mem_limit) {
 }
 
 void VOlapTableSinkV2Mgr::register_writer(std::shared_ptr<DeltaWriter> writer) {
-    std::lock_guard<SpinLock> l(_writer_lock);
+    std::lock_guard<std::mutex> l(_lock);
     _writers.insert(writer);
 }
 
 void VOlapTableSinkV2Mgr::deregister_writer(std::shared_ptr<DeltaWriter> writer) {
-    std::lock_guard<SpinLock> l(_writer_lock);
+    std::lock_guard<std::mutex> l(_lock);
     _writers.erase(writer);
 }
 
@@ -69,7 +69,7 @@ void VOlapTableSinkV2Mgr::handle_memtable_flush() {
     int64_t process_soft_mem_limit = MemInfo::soft_mem_limit();
     int64_t proc_mem_no_allocator_cache = MemInfo::proc_mem_no_allocator_cache();
     // If process memory is almost full but data load don't consume more than 5% (50% * 10%) of
-    // total memory, we don't need to reduce memory of load jobs.
+    // total memory, we don't need to flush memtable.
     bool reduce_on_process_soft_mem_limit =
             proc_mem_no_allocator_cache >= process_soft_mem_limit &&
             _mem_tracker->consumption() >= _load_hard_mem_limit / 10;
@@ -184,11 +184,11 @@ void VOlapTableSinkV2Mgr::handle_memtable_flush() {
             _soft_reduce_mem_in_progress = false;
         }
         // refresh mem tacker to avoid duplicate reduce
-        _refresh_mem_tracker_without_lock();
+        _refresh_mem_tracker();
     }
 }
 
-void VOlapTableSinkV2Mgr::_refresh_mem_tracker_without_lock() {
+void VOlapTableSinkV2Mgr::_refresh_mem_tracker() {
     int64_t mem_usage = 0;
     for (auto& writer : _writers) {
         mem_usage += writer->mem_consumption(MemType::ALL);

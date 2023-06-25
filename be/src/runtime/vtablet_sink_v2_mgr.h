@@ -24,7 +24,7 @@ public:
     void deregister_writer(std::shared_ptr<DeltaWriter> writer);
 
 private:
-    void _refresh_mem_tracker_without_lock();
+    void _refresh_mem_tracker();
 
     std::mutex _lock;
     // If hard limit reached, one thread will trigger load channel flush,
@@ -38,7 +38,5 @@ private:
     bool _soft_reduce_mem_in_progress = false;
 
     std::unordered_set<std::shared_ptr<DeltaWriter>> _writers;
-
-    SpinLock _writer_lock;
 };
 } // namespace doris
