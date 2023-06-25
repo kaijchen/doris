@@ -152,6 +152,14 @@ public:
     Status close(RuntimeState* state, Status close_status) override;
     Status send(RuntimeState* state, vectorized::Block* block, bool eos = false) override;
 
+    int64_t mem_consumption();
+
+    int64_t get_active_memtable_mem_consumption_snap();
+
+    void flush_memtable_async();
+
+    void wait_flush();
+
     const RowDescriptor& row_desc() { return _input_row_desc; }
 
     // Returns the runtime profile for the sink.
@@ -319,6 +327,8 @@ private:
     bthread::Mutex _tablet_failure_map_mutex;
 
     friend class StreamSinkHandler;
+
+    SpinLock _lock;
 };
 
 } // namespace stream_load

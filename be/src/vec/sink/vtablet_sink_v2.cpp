@@ -523,6 +523,54 @@ void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
     return nullptr;
 }
 
+int64_t VOlapTableSinkV2::mem_consumption() {
+    int64_t all_mem = 0;
+    std::lock_guard<SpinLock> l(_lock);
+    for (auto& it : *_delta_writer_for_tablet) {
+        all_mem += it.second.get()->mem_consumption(MemType::ALL);
+    }
+    return all_mem;
+}
+
+int64_t VOlapTableSinkV2::get_active_memtable_mem_consumption_snap() {
+    int64_t all_active_memtable_mem = 0;
+    std::lock_guard<SpinLock> l(_lock);
+    for (auto& it : *_delta_writer_for_tablet) {
+        all_active_memtable_mem += it.second.get()->active_memtable_mem_consumption();
+    }
+    return all_active_memtable_mem;
+}
+
+void VOlapTableSinkV2::flush_memtable_async() {
+    std::lock_guard<SpinLock> l(_lock);
+    for (auto& it : *_delta_writer_for_tablet) {
+        Status st = it.second.get()->flush_memtable_and_wait(false);
+        if (!st.ok()) {
+            auto err_msg = fmt::format(
+                    "table sink failed to reduce mem consumption when flush memtable, "
+                    "tablet_id={}, txn_id={}, err={}",
+                    it.first, _txn_id, st.to_string());
+            LOG(WARNING) << err_msg;
+            it.second->cancel_with_status(st);
+        }
+    }
+}
+
+void VOlapTableSinkV2::wait_flush() {
+    std::lock_guard<SpinLock> l(_lock);
+    for (auto& it : *_delta_writer_for_tablet) {
+        Status st = it.second.get()->wait_flush();
+        if (!st.ok()) {
+            auto err_msg = fmt::format(
+                    "table sink failed to reduce mem consumption when wait to flush memtable, "
+                    "tablet_id={}, txn_id={}, err={}",
+                    it.first, _txn_id, st.to_string());
+            LOG(WARNING) << err_msg;
+            it.second->cancel_with_status(st);
+        }
+    }
+}
+
 Status VOlapTableSinkV2::close(RuntimeState* state, Status exec_status) {
     LOG(INFO) << "Closing VOlapTableSinkV2, flying task count: " << _flying_task_count;
     if (_closed) {
