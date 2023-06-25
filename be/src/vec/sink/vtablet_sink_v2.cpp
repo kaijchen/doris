@@ -251,15 +251,24 @@ Status VOlapTableSinkV2::open(RuntimeState* state) {
     SCOPED_TIMER(_open_timer);
     SCOPED_CONSUME_MEM_TRACKER(_mem_tracker.get());
 
-    _stream_pool = std::make_shared<StreamPool>();
+    _stream_pool_for_node = std::make_shared<StreamPoolForNode>();
     _delta_writer_for_tablet = std::make_shared<DeltaWriterForTablet>();
     _delta_writer_for_tablet_mutex = std::make_shared<bthread::Mutex>();
-    RETURN_IF_ERROR(_init_stream_pool(*_stream_pool));
+    RETURN_IF_ERROR(_init_stream_pools(*_stream_pool_for_node));
 
     return Status::OK();
 }
 
-Status VOlapTableSinkV2::_init_stream_pool(StreamPool& stream_pool) {
+Status VOlapTableSinkV2::_init_stream_pools(StreamPoolForNode& stream_pool_for_node) {
+    for (auto& entry : _nodes_info->nodes_info()) {
+        stream_pool_for_node.insert({entry.first, StreamPool {}});
+        StreamPool& stream_pool = stream_pool_for_node[entry.first];
+        RETURN_IF_ERROR(_init_stream_pool(entry.second, stream_pool));
+    }
+    return Status::OK();
+}
+
+Status VOlapTableSinkV2::_init_stream_pool(const NodeInfo& node_info, StreamPool& stream_pool) {
     DCHECK_GT(config::stream_cnt_per_sink, 0);
     stream_pool.reserve(config::stream_cnt_per_sink);
     for (int i = 0; i < config::stream_cnt_per_sink; ++i) {
@@ -274,9 +283,8 @@ Status VOlapTableSinkV2::_init_stream_pool(StreamPool& stream_pool) {
             LOG(ERROR) << "Failed to create stream";
             return Status::RpcError("Failed to create stream");
         }
-        LOG(INFO) << "Created stream " << stream;
-        // randomly choose a BE to be the primary BE
-        const auto& node_info = _nodes_info->nodes_info().begin()->second;
+        LOG(INFO) << "Created stream " << stream << " for backend " << node_info.id << " ("
+                  << node_info.host << ":" << node_info.brpc_port << ")";
         const auto& stub = _state->exec_env()->brpc_internal_client_cache()->get_client(
                 node_info.host, node_info.brpc_port);
         POpenStreamSinkRequest request;
@@ -287,8 +295,7 @@ Status VOlapTableSinkV2::_init_stream_pool(StreamPool& stream_pool) {
         request.release_id();
         if (cntl.Failed()) {
             LOG(ERROR) << "Fail to connect stream, " << cntl.ErrorText();
-            // TODO: uncomment return
-            // return Status::RpcError("Failed to connect stream");
+            return Status::RpcError("Failed to connect stream");
         }
         stream_pool.push_back(stream);
     }
@@ -487,10 +494,12 @@ void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
                     break;
                 }
             }
-            const brpc::StreamId& stream = sink->_stream_pool->at(sink->_stream_pool_index);
-            sink->_stream_pool_index = (sink->_stream_pool_index + 1) % sink->_stream_pool->size();
             DeltaWriter::open(&wrequest, &delta_writer, sink->_profile, sink->_load_id);
-            delta_writer->add_stream(stream);
+            for (const auto& entry : *sink->_stream_pool_for_node) {
+                brpc::StreamId stream = entry.second[sink->_stream_pool_index];
+                delta_writer->add_stream(stream);
+            }
+            sink->_stream_pool_index = (sink->_stream_pool_index + 1) % config::stream_cnt_per_sink;
             delta_writer->register_flying_memtable_counter(&sink->_flying_memtable_count);
             sink->_delta_writer_for_tablet->insert({key, std::unique_ptr<DeltaWriter>(delta_writer)});
         } else {
@@ -573,12 +582,14 @@ Status VOlapTableSinkV2::close(RuntimeState* state, Status exec_status) {
         }
 
         // close streams
-        if (_stream_pool.use_count() == 1) {
-            for (const auto& stream_id : *_stream_pool) {
-                brpc::StreamClose(stream_id);
+        if (_stream_pool_for_node.use_count() == 1) {
+            for (const auto& entry : *_stream_pool_for_node) {
+                for (auto stream_id : entry.second) {
+                    brpc::StreamClose(stream_id);
+                }
             }
         }
-        _stream_pool.reset();
+        _stream_pool_for_node.reset();
 
         std::vector<TTabletCommitInfo> tablet_commit_infos;
         for (auto& entry : _tablet_success_map) {
