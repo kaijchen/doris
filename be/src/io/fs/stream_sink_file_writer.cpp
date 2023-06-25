@@ -62,6 +62,9 @@ Status StreamSinkFileWriter::init(Path path, PUniqueId load_id, int64_t index_id
 }
 
 Status StreamSinkFileWriter::appendv(const Slice* data, size_t data_cnt) {
+    LOG(INFO) << "writer appendv, load_id: " << UniqueId(_load_id).to_string()
+              << ", index_id: " << _index_id << ", tablet_id: " << _tablet_id
+              << ", segment_id: " << _segment_id << ", size = " << data_cnt;
     butil::IOBuf buf;
     PStreamHeader header;
     header.set_allocated_load_id(&_load_id);
@@ -82,6 +85,9 @@ Status StreamSinkFileWriter::appendv(const Slice* data, size_t data_cnt) {
 }
 
 Status StreamSinkFileWriter::finalize(RowsetMetaPB* rowset_meta) {
+    LOG(INFO) << "writer finalize, load_id: " << UniqueId(_load_id).to_string()
+              << ", index_id: " << _index_id << ", tablet_id: " << _tablet_id
+              << ", segment_id: " << _segment_id << ", rowset_meta = " << rowset_meta;
     butil::IOBuf buf;
     PStreamHeader header;
     header.set_allocated_load_id(&_load_id);
