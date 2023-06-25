@@ -167,7 +167,7 @@ uint64_t SinkStreamHandler::get_next_segmentid(TargetRowsetPtr target_rowset, in
             return 0;
         }
         if (is_open) {
-            return _tablet_segment_next_id[target_rowset]++;
+            return ++_tablet_segment_next_id[target_rowset];
         } else {
             return _tablet_segment_next_id[target_rowset];
         }
