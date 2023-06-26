@@ -31,8 +31,8 @@ StreamSinkFileWriter::~StreamSinkFileWriter() {}
 Status StreamSinkFileWriter::init(PUniqueId load_id, int64_t index_id, int64_t tablet_id,
                                   RowsetId rowset_id, int32_t segment_id, bool is_last_segment,
                                   int32_t schema_hash) {
-    LOG(INFO) << "init stream writer, load id(" << UniqueId(load_id).to_string()
-              << "), index id(" << index_id << "), tablet_id(" << tablet_id << "), rowset id("
+    LOG(INFO) << "init stream writer, load id(" << UniqueId(load_id).to_string() << "), index id("
+              << index_id << "), tablet_id(" << tablet_id << "), rowset id("
               << rowset_id.to_string() << "), segment_id(" << segment_id << "), last segment("
               << is_last_segment << "), schema_hash(" << schema_hash << ")";
     _load_id = load_id;
