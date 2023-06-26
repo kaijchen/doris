@@ -83,6 +83,7 @@
 #include "runtime/load_channel_mgr.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
+#include "runtime/sink_stream_mgr.h"
 #include "runtime/stream_load/new_load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/thread_context.h"
@@ -116,7 +117,6 @@
 #include "vec/exec/format/parquet/vparquet_reader.h"
 #include "vec/jsonb/serialize.h"
 #include "vec/runtime/vdata_stream_mgr.h"
-#include "runtime/sink_stream_mgr.h"
 
 namespace google {
 namespace protobuf {
@@ -257,8 +257,7 @@ void PInternalServiceImpl::open_stream_sink(google::protobuf::RpcController* con
     brpc::ClosureGuard done_guard(done);
     LOG(INFO) << "OOXXOO: open stream sink"; //TODO: remove log
     std::unique_ptr<PStatus> status = std::make_unique<PStatus>();
-    brpc::Controller* cntl =
-            static_cast<brpc::Controller*>(controller);
+    brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
     brpc::StreamOptions stream_options;
     ExecEnv* env = ExecEnv::GetInstance();
     SinkStreamMgr* sink_stream_mgr = env->get_sink_stream_mgr();
