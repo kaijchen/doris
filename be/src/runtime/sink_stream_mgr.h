@@ -92,6 +92,7 @@ private:
     // TODO: make it per load
     std::map<TargetSegmentPtr, std::shared_ptr<ThreadPoolToken>, TargetSegmentComparator>
             _segment_token_map; // accessed in single thread, safe
+    std::mutex _segment_token_map_lock;
     std::map<TargetSegmentPtr, TargetSegmentPtr, TargetSegmentComparator>
             _rawsegment_finalsegment_map;
     std::mutex _rawsegment_finalsegment_map_lock;

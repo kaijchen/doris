@@ -113,9 +113,10 @@ Status SinkStreamHandler::_append_data(TargetSegmentPtr target_segment,
     {
         std::lock_guard<std::mutex> l(_file_map_lock);
         itr = _file_map.find(target_segment);
-    }
-    if (itr == _file_map.end()) {
-        return Status::InternalError("file not found");
+
+        if (itr == _file_map.end()) {
+            return Status::InternalError("file not found");
+        }
     }
     std::shared_ptr<io::LocalFileWriter> file_writer = (itr->second);
     file_writer->append(message->to_string());
@@ -328,16 +329,24 @@ int SinkStreamHandler::on_received_messages(StreamId id, butil::IOBuf* const mes
             DCHECK(target_segment.get());
         }
 
-        // serialize OPs on same file: open, write1, write2, ... , close
-        if (_segment_token_map.find(target_segment) == _segment_token_map.end()) {
-            _segment_token_map[target_segment] =
-                    _workers->new_token(ThreadPool::ExecutionMode::SERIAL);
-        }
+        std::shared_ptr<ThreadPoolToken> token = nullptr;
+        {
+            std::lock_guard<std::mutex> l(_segment_token_map_lock);
+            // serialize OPs on same file: open, write1, write2, ... , close
+            if (_segment_token_map.find(target_segment) == _segment_token_map.end()) {
+                _segment_token_map[target_segment] =
+                        _workers->new_token(ThreadPool::ExecutionMode::SERIAL);
+            }
 
-        auto token = _segment_token_map[target_segment];
-        token->submit_func([this, id, hdr, target_rowset, target_segment, messageBuf]() {
+            token = _segment_token_map[target_segment];
+        }
+        auto s = token->submit_func([this, id, hdr, target_rowset, target_segment, messageBuf]() {
             _handle_message(id, hdr, target_rowset, target_segment, messageBuf);
         });
+        if (s != Status::OK()) {
+            LOG(WARNING) << "Failed to submit task to threadpool, reason: " << s;
+            return -1; // TODO handle it ?
+        }
         LOG(INFO) << "OOXXOO target_segment: " << target_segment->to_string()
                   << " submitted to threadpool via token: " << token.get();
     }
