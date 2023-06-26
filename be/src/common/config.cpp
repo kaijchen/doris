@@ -486,7 +486,6 @@ DEFINE_mInt64(clean_stream_load_record_interval_secs, "1800");
 // You may need to lower the speed when the sink receiver bes are too busy.
 DEFINE_mInt32(olap_table_sink_send_interval_ms, "1");
 
-
 // Fragment thread pool
 DEFINE_Int32(fragment_pool_thread_num_min, "64");
 DEFINE_Int32(fragment_pool_thread_num_max, "512");

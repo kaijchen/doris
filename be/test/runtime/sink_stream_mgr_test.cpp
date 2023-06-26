@@ -15,10 +15,22 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#include "runtime/sink_stream_mgr.h"
+
+#include <brpc/channel.h>
+#include <brpc/server.h>
+#include <brpc/stream.h>
+#include <butil/logging.h>
 #include <gen_cpp/Types_types.h>
+#include <gen_cpp/internal_service.pb.h>
+#include <gflags/gflags.h>
 #include <gtest/gtest-message.h>
 #include <gtest/gtest-test-part.h>
+#include <olap/storage_engine.h>
+#include <service/internal_service.h>
 #include <unistd.h>
+
+#include <functional>
 
 #include "common/config.h"
 #include "common/status.h"
@@ -26,16 +38,6 @@
 #include "gen_cpp/FrontendService_types.h"
 #include "gtest/gtest_pred_impl.h"
 #include "runtime/exec_env.h"
-#include "runtime/sink_stream_mgr.h"
-#include <gflags/gflags.h>
-#include <butil/logging.h>
-#include <brpc/channel.h>
-#include <brpc/stream.h>
-#include <brpc/server.h>
-#include <gen_cpp/internal_service.pb.h>
-#include <service/internal_service.h>
-#include <functional>
-#include <olap/storage_engine.h>
 
 namespace doris {
 
@@ -43,24 +45,20 @@ static const uint32_t MAX_PATH_LEN = 1024;
 StorageEngine* z_engine = nullptr;
 static const std::string zTestDir = "./data_test/data/sink_stream_mgr_test";
 
-class SinkStreamMgrTest: public testing::Test {
+class SinkStreamMgrTest : public testing::Test {
 public:
-
     class Handler : public StreamInputHandler {
     public:
-        int on_received_messages(StreamId id, butil::IOBuf* const messages[], size_t size) override {
+        int on_received_messages(StreamId id, butil::IOBuf* const messages[],
+                                 size_t size) override {
             std::cerr << "on_received_messages" << std::endl;
             for (size_t i = 0; i < size; ++i) {
-                    std::cerr << "message[" << i << "]: " << messages[i]->to_string() << std::endl;
+                std::cerr << "message[" << i << "]: " << messages[i]->to_string() << std::endl;
             }
             return 0;
         }
-        void on_idle_timeout(StreamId id) override {
-            std::cerr << "on_idle_timeout" << std::endl;
-        }
-        void on_closed(StreamId id) override {
-            std::cerr << "on_closed" << std::endl;
-        }
+        void on_idle_timeout(StreamId id) override { std::cerr << "on_idle_timeout" << std::endl; }
+        void on_closed(StreamId id) override { std::cerr << "on_closed" << std::endl; }
     };
 
     class MockSinkClient {
@@ -70,13 +68,14 @@ public:
 
         class MockClosure : public google::protobuf::Closure {
         public:
-            MockClosure(std::function<void ()> cb) : _cb(cb) {}
+            MockClosure(std::function<void()> cb) : _cb(cb) {}
             void Run() override {
                 _cb();
                 delete this;
             }
+
         private:
-            std::function<void ()> _cb;
+            std::function<void()> _cb;
         };
 
         Status connect_stream() {
@@ -86,7 +85,7 @@ public:
             brpc::ChannelOptions options;
             options.protocol = brpc::PROTOCOL_BAIDU_STD;
             options.connection_type = "single";
-            options.timeout_ms = 10000/*milliseconds*/;
+            options.timeout_ms = 10000 /*milliseconds*/;
             options.max_retry = 3;
             CHECK_EQ(0, channel.Init("127.0.0.1:18947", nullptr));
 
@@ -119,9 +118,7 @@ public:
             return Status::OK();
         }
 
-        StreamId get_stream_id() {
-            return _stream;
-        }
+        StreamId get_stream_id() { return _stream; }
 
         void disconnect() {
             std::cerr << "disconnect" << std::endl;
@@ -138,9 +135,8 @@ public:
             return Status::OK();
         }
 
-        Status close() {
-            return Status::OK();
-        }
+        Status close() { return Status::OK(); }
+
     private:
         brpc::StreamId _stream;
         brpc::Controller _cntl;
@@ -198,7 +194,7 @@ public:
 
     ExecEnv* _env;
     brpc::Server _server;
-    PInternalServiceImpl*  _internal_service;
+    PInternalServiceImpl* _internal_service;
 };
 
 TEST_F(SinkStreamMgrTest, open_append_close_file_twice) {
@@ -395,7 +391,7 @@ TEST_F(SinkStreamMgrTest, open_append_close_file_twice) {
         header.set_segment_id(6);
         header.set_tablet_schema_hash(5);
         header.set_rowset_id("6");
-        header.set_is_last_segment(true); // change it to true when last segment
+        header.set_is_last_segment(true);                     // change it to true when last segment
         header.set_allocated_rowset_meta(new RowsetMetaPB()); // last segment has rowset meta
         int64_t rowset_id = 1;
         header.mutable_rowset_meta()->set_rowset_id(rowset_id);
@@ -424,7 +420,7 @@ TEST_F(SinkStreamMgrTest, open_append_close_file_twice) {
         header.set_index_id(2);
         header.set_tablet_id(3);
         header.set_segment_id(5);
-        header.set_is_last_segment(true); // change it to true when last segment
+        header.set_is_last_segment(true);                     // change it to true when last segment
         header.set_allocated_rowset_meta(new RowsetMetaPB()); // last segment has rowset meta
         int64_t rowset_id = 1;
         header.mutable_rowset_meta()->set_rowset_id(rowset_id);

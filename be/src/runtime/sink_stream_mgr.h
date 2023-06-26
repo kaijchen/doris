@@ -17,14 +17,16 @@
 
 #pragma once
 
-#include <fstream>
-#include <iostream>
 #include <brpc/stream.h>
-#include "butil/iobuf.h"
-#include "util/threadpool.h"
-#include "olap/olap_common.h"
 #include <gen_cpp/internal_service.pb.h>
 #include <io/fs/local_file_writer.h>
+
+#include <fstream>
+#include <iostream>
+
+#include "butil/iobuf.h"
+#include "olap/olap_common.h"
+#include "util/threadpool.h"
 
 namespace doris {
 using namespace brpc;
@@ -62,32 +64,36 @@ public:
     SinkStreamHandler();
     ~SinkStreamHandler();
 
-    int on_received_messages(StreamId id, butil::IOBuf *const messages[], size_t size) override;
+    int on_received_messages(StreamId id, butil::IOBuf* const messages[], size_t size) override;
     void on_idle_timeout(StreamId id) override;
     void on_closed(StreamId id) override;
 
 private:
     void _handle_message(StreamId id, PStreamHeader hdr, TargetRowsetPtr rowset,
                          TargetSegmentPtr segment, std::shared_ptr<butil::IOBuf> message);
-    void _parse_header(butil::IOBuf *const message, PStreamHeader& hdr);
+    void _parse_header(butil::IOBuf* const message, PStreamHeader& hdr);
     Status _create_and_open_file(TargetSegmentPtr target_segment, std::string path, bool is_last);
     Status _append_data(TargetSegmentPtr target_segment, std::shared_ptr<butil::IOBuf> message);
     Status _close_file(TargetSegmentPtr target_segment, bool is_last_segment);
-    void _report_status(StreamId stream, TargetRowsetPtr target_rowset, bool is_success, std::string error_msg);
+    void _report_status(StreamId stream, TargetRowsetPtr target_rowset, bool is_success,
+                        std::string error_msg);
     uint64_t get_next_segmentid(TargetRowsetPtr target_rowset);
     Status _build_rowset(TargetRowsetPtr target_rowset, const RowsetMetaPB& rowset_meta);
 
 private:
     std::unique_ptr<ThreadPool> _workers;
     // TODO: make it per load
-    std::map<TargetSegmentPtr, std::shared_ptr<io::LocalFileWriter>, TargetSegmentComparator> _file_map;
+    std::map<TargetSegmentPtr, std::shared_ptr<io::LocalFileWriter>, TargetSegmentComparator>
+            _file_map;
     std::mutex _file_map_lock;
     // TODO: make it per load
     std::map<TargetRowsetPtr, size_t, TargetRowsetComparator> _tablet_segment_next_id;
     std::mutex _tablet_segment_next_id_lock;
     // TODO: make it per load
-    std::map<TargetSegmentPtr, std::shared_ptr<ThreadPoolToken>, TargetSegmentComparator> _segment_token_map; // accessed in single thread, safe
-    std::map<TargetSegmentPtr, TargetSegmentPtr, TargetSegmentComparator> _rawsegment_finalsegment_map;
+    std::map<TargetSegmentPtr, std::shared_ptr<ThreadPoolToken>, TargetSegmentComparator>
+            _segment_token_map; // accessed in single thread, safe
+    std::map<TargetSegmentPtr, TargetSegmentPtr, TargetSegmentComparator>
+            _rawsegment_finalsegment_map;
     std::mutex _rawsegment_finalsegment_map_lock;
 };
 
@@ -107,4 +113,4 @@ private:
     std::shared_ptr<SinkStreamHandler> _handler;
 };
 
-}
+} // namespace doris
