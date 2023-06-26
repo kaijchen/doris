@@ -131,7 +131,7 @@ public:
 
     void add_stream(brpc::StreamId stream) { _streams.push_back(stream); }
 
-    void register_flying_memtable_counter(std::atomic<int32_t>* counter) {
+    void register_flying_memtable_counter(std::shared_ptr<std::atomic<int32_t>> counter) {
         _flying_memtable_counter = counter;
     }
 
@@ -219,7 +219,7 @@ private:
 
     std::vector<brpc::StreamId> _streams;
 
-    std::atomic<int32_t>* _flying_memtable_counter;
+    std::shared_ptr<std::atomic<int32_t>> _flying_memtable_counter;
 };
 
 } // namespace doris

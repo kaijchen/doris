@@ -143,6 +143,7 @@ VOlapTableSinkV2::VOlapTableSinkV2(ObjectPool* pool, const RowDescriptor& row_de
     *status = vectorized::VExpr::create_expr_trees(texprs, _output_vexpr_ctxs);
     _name = "VOlapTableSinkV2";
     _transfer_large_data_by_brpc = config::transfer_large_data_by_brpc;
+    _flying_memtable_counter = std::make_shared<std::atomic<int32_t>>(0);
 }
 
 VOlapTableSinkV2::~VOlapTableSinkV2() = default;
@@ -393,7 +394,7 @@ Status VOlapTableSinkV2::send(RuntimeState* state, vectorized::Block* input_bloc
 
     {
         SCOPED_TIMER(_wait_mem_limit_timer);
-        while (_flying_memtable_count.load() >= config::max_flying_memtable_per_sink) {
+        while (_flying_memtable_counter->load() >= config::max_flying_memtable_per_sink) {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     }
@@ -505,7 +506,7 @@ void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
                 delta_writer->add_stream(stream);
             }
             sink->_stream_pool_index = (sink->_stream_pool_index + 1) % config::stream_cnt_per_sink;
-            delta_writer->register_flying_memtable_counter(&sink->_flying_memtable_count);
+            delta_writer->register_flying_memtable_counter(sink->_flying_memtable_counter);
             sink->_delta_writer_for_tablet->insert({key, std::unique_ptr<DeltaWriter>(delta_writer)});
         } else {
             DLOG(INFO) << "Reusing DeltaWriter for Tablet(tablet id: " << ctx->tablet_id

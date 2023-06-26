@@ -71,7 +71,7 @@ public:
     // get flush operations' statistics
     const FlushStatistic& get_stats() const { return _stats; }
 
-    void register_flying_memtable_counter(std::atomic<int32_t>* counter) {
+    void register_flying_memtable_counter(std::shared_ptr<std::atomic<int32_t>> counter) {
         _flying_memtable_counter = counter;
     }
 
@@ -88,7 +88,7 @@ private:
 
     FlushStatistic _stats;
 
-    std::atomic<int32_t>* _flying_memtable_counter = nullptr;
+    std::shared_ptr<std::atomic<int32_t>> _flying_memtable_counter;
 };
 
 // MemTableFlushExecutor is responsible for flushing memtables to disk.
