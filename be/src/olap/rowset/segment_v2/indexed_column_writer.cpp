@@ -119,9 +119,12 @@ Status IndexedColumnWriter::_finish_current_data_page(size_t& num_val) {
     footer.mutable_data_page_footer()->set_nullmap_size(0);
 
     uint64_t start_size = _file_writer->bytes_appended();
-    RETURN_IF_ERROR(PageIO::compress_and_write_page(
-            _compress_codec, _options.compression_min_space_saving, _file_writer,
-            {page_body.slice()}, footer, &_last_data_page));
+    std::vector<OwnedSlice> slices;
+    slices.emplace_back(std::move(page_body));
+
+    RETURN_IF_ERROR(
+            PageIO::compress_and_write_page(_compress_codec, _options.compression_min_space_saving,
+                                            _file_writer, slices, footer, &_last_data_page));
     _num_data_pages++;
     _disk_size += (_file_writer->bytes_appended() - start_size);
 
@@ -176,9 +179,11 @@ Status IndexedColumnWriter::_flush_index(IndexPageBuilder* index_builder, BTreeM
 
         PagePointer pp;
         uint64_t start_size = _file_writer->bytes_appended();
+        std::vector<OwnedSlice> owned_slices;
+        owned_slices.emplace_back(std::move(page_body));
         RETURN_IF_ERROR(PageIO::compress_and_write_page(
-                _compress_codec, _options.compression_min_space_saving, _file_writer,
-                {page_body.slice()}, page_footer, &pp));
+                _compress_codec, _options.compression_min_space_saving, _file_writer, owned_slices,
+                page_footer, &pp));
         _disk_size += (_file_writer->bytes_appended() - start_size);
 
         meta->set_is_root_data_page(false);
