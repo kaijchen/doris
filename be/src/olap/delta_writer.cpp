@@ -472,7 +472,7 @@ Status DeltaWriter::close_wait(const PSlaveTabletNodes& slave_tablet_nodes,
     {
         SCOPED_TIMER(_commit_txn_timer);
         res = _storage_engine->txn_manager()->commit_txn(_req.partition_id, _tablet, _req.txn_id,
-                                                                _req.load_id, _cur_rowset, false);
+                                                         _req.load_id, _cur_rowset, false);
     }
 
     if (!res && !res.is<PUSH_TRANSACTION_ALREADY_EXIST>()) {
