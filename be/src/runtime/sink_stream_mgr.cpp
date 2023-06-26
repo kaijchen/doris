@@ -133,6 +133,7 @@ Status SinkStreamHandler::_close_file(TargetSegmentPtr target_segment, bool is_l
         _file_map.erase(itr);
     }
     file_writer->finalize();
+    LOG(INFO) << "segment_size: " << file_writer->bytes_appended();
     file_writer->close();
     LOG(INFO) << "OOXXOO close file, is_last_segment = " << is_last_segment << " ";
     return Status::OK();
