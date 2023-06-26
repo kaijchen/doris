@@ -115,8 +115,6 @@ public:
 
     virtual void add_streams(std::vector<brpc::StreamId>& streams) {}
 
-    virtual void notify_last() {}
-
 private:
     DISALLOW_COPY_AND_ASSIGN(RowsetWriter);
 };

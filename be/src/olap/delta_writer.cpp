@@ -37,6 +37,7 @@
 #include "gutil/integral_types.h"
 #include "gutil/strings/numbers.h"
 #include "io/fs/file_writer.h" // IWYU pragma: keep
+#include "io/fs/stream_sink_file_writer.h"
 #include "olap/data_dir.h"
 #include "olap/memtable.h"
 #include "olap/memtable_flush_executor.h"
@@ -430,7 +431,6 @@ Status DeltaWriter::close_wait(const PSlaveTabletNodes& slave_tablet_nodes,
     }
 
     _mem_table.reset();
-    _rowset_writer->notify_last();
 
     if (_rowset_writer->num_rows() + _memtable_stat.merged_rows != _total_received_rows) {
         LOG(WARNING) << "the rows number written doesn't match, rowset num rows written to file: "
@@ -447,6 +447,9 @@ Status DeltaWriter::close_wait(const PSlaveTabletNodes& slave_tablet_nodes,
     if (_cur_rowset == nullptr) {
         LOG(WARNING) << "fail to build rowset";
         return Status::Error<MEM_ALLOC_FAILED>();
+    }
+    if (config::experimental_olap_table_sink_v2) {
+        RETURN_IF_ERROR(_notify_last_segment());
     }
 
     if (_tablet->enable_unique_key_merge_on_write()) {
@@ -717,6 +720,23 @@ void DeltaWriter::finish_slave_tablet_pull_rowset(int64_t node_id, bool is_succe
                       << "], tablet_id=" << _tablet->tablet_id() << ", node_id=" << node_id;
     }
     _unfinished_slave_node.erase(node_id);
+}
+
+Status DeltaWriter::_notify_last_segment() {
+    DCHECK(config::experimental_olap_table_sink_v2);
+
+    LOG(INFO) << "notifying last segment";
+    // send a dummy segment as a signal for closing stream
+    auto stream_id = *_streams.begin();
+    auto stream_writer = std::make_unique<io::StreamSinkFileWriter>(stream_id);
+    int32_t segment_id = -1;
+    bool is_last_segment = true;
+
+    stream_writer->init(_req.load_id, _req.index_id, _req.tablet_id, _cur_rowset->rowset_id(),
+                        segment_id, is_last_segment, _req.schema_hash);
+    RowsetMetaPB rowset_meta_pb = _cur_rowset->rowset_meta()->get_rowset_pb();
+    stream_writer->finalize(&rowset_meta_pb);
+    return Status::OK();
 }
 
 } // namespace doris

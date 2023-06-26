@@ -142,6 +142,8 @@ private:
     // push a full memtable to flush executor
     Status _flush_memtable_async();
 
+    Status _notify_last_segment();
+
     void _garbage_collection();
 
     void _reset_mem_table();

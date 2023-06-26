@@ -883,25 +883,4 @@ Status BetaRowsetWriter::flush_segment_writer_for_segcompaction(
     return Status::OK();
 }
 
-void BetaRowsetWriter::notify_last() {
-    if (!config::experimental_olap_table_sink_v2) {
-        return;
-    }
-
-    int32_t segment_id = _next_segment_id.load();
-    auto index_id = _index_id;
-    auto tablet_id = _rowset_meta->tablet_id();
-    auto load_id = _rowset_meta->load_id();
-    auto rowset_id = _rowset_meta->rowset_id();
-    auto stream_id = *_streams.begin();
-
-    LOG(INFO) << "notifying last segment";
-    auto stream_writer = std::make_unique<io::StreamSinkFileWriter>(stream_id);
-    stream_writer->init(load_id, index_id, tablet_id, rowset_id, segment_id, true,
-                        _context.tablet_schema_hash);
-
-    RowsetMetaPB rowset_meta = _rowset_meta->get_rowset_pb();
-    stream_writer->finalize(&rowset_meta);
-}
-
 } // namespace doris
