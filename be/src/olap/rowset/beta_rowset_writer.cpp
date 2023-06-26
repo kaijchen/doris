@@ -731,7 +731,8 @@ Status BetaRowsetWriter::_do_create_segment_writer(
         auto stream_id = *_streams.begin();
 
         auto stream_writer = std::make_unique<io::StreamSinkFileWriter>(stream_id);
-        stream_writer->init(load_id, index_id, tablet_id, rowset_id, segment_id, false, _context.tablet_schema_hash);
+        stream_writer->init(load_id, index_id, tablet_id, rowset_id, segment_id, false,
+                            _context.tablet_schema_hash);
         file_writer = std::move(stream_writer);
     } else {
         st = fs->create_file(path, &file_writer);
@@ -896,7 +897,8 @@ void BetaRowsetWriter::notify_last() {
 
     LOG(INFO) << "notifying last segment";
     auto stream_writer = std::make_unique<io::StreamSinkFileWriter>(stream_id);
-    stream_writer->init(load_id, index_id, tablet_id, rowset_id, segment_id, true, _context.tablet_schema_hash);
+    stream_writer->init(load_id, index_id, tablet_id, rowset_id, segment_id, true,
+                        _context.tablet_schema_hash);
 
     RowsetMetaPB rowset_meta = _rowset_meta->get_rowset_pb();
     stream_writer->finalize(&rowset_meta);
