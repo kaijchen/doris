@@ -34,6 +34,7 @@ using StreamIdPtr = std::shared_ptr<StreamId>;
 
 // locate a rowset
 struct TargetRowset {
+    brpc::StreamId streamid;
     UniqueId loadid;
     int64_t indexid;
     int64_t tabletid;

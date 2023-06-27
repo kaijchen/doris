@@ -45,6 +45,9 @@ bool TargetSegmentComparator::operator()(const TargetSegmentPtr& lhs,
 
 bool TargetRowsetComparator::operator()(const TargetRowsetPtr& lhs,
                                         const TargetRowsetPtr& rhs) const {
+    if (lhs->streamid != rhs->streamid) {
+        return lhs->streamid < rhs->streamid;
+    }
     if (lhs->loadid.hi != rhs->loadid.hi) {
         return lhs->loadid.hi < rhs->loadid.hi;
     }
@@ -62,7 +65,8 @@ bool TargetRowsetComparator::operator()(const TargetRowsetPtr& lhs,
 
 std::string TargetRowset::to_string() {
     std::stringstream ss;
-    ss << "loadid: " << loadid << ", indexid: " << indexid << ", tabletid: " << tabletid;
+    ss << "streamid: " << streamid << ", loadid: " << loadid << ", indexid: " << indexid
+       << ", tabletid: " << tabletid;
     return ss.str();
 }
 
@@ -301,6 +305,7 @@ int SinkStreamHandler::on_received_messages(StreamId id, butil::IOBuf* const mes
         _parse_header(&hdr_buf, hdr);
 
         TargetRowsetPtr target_rowset = std::make_shared<TargetRowset>();
+        target_rowset->streamid = id;
         target_rowset->loadid = hdr.load_id();
         target_rowset->indexid = hdr.index_id();
         target_rowset->tabletid = hdr.tablet_id();
