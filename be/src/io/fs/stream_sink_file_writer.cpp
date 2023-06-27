@@ -58,10 +58,10 @@ Status StreamSinkFileWriter::init(PUniqueId load_id, int64_t index_id, int64_t t
     return status;
 }
 
-Status StreamSinkFileWriter::appendv(const Slice* data, size_t data_cnt) {
+Status StreamSinkFileWriter::appendv(const OwnedSlice* data, size_t data_cnt) {
     size_t bytes_req = 0;
     for (int i = 0; i < data_cnt; i++) {
-        bytes_req += data[i].get_size();
+        bytes_req += data[i].slice().get_size();
     }
     LOG(INFO) << "writer appendv, load_id: " << UniqueId(_load_id).to_string()
               << ", index_id: " << _index_id << ", tablet_id: " << _tablet_id
@@ -79,9 +79,12 @@ Status StreamSinkFileWriter::appendv(const Slice* data, size_t data_cnt) {
     buf.append(reinterpret_cast<uint8_t*>(&header_len), sizeof(header_len));
     buf.append(header.SerializeAsString());
     for (int i = 0; i < data_cnt; i++) {
-        buf.append_user_data(const_cast<void*>(static_cast<const void*>(data[i].get_data())),
-                             data[i].get_size(), deleter);
+        Slice slice = data[i].slice();
+        buf.append_user_data(const_cast<void*>(static_cast<const void*>(slice.get_data())),
+                             slice.get_size(), deleter);
+        (const_cast<OwnedSlice*>(&data[i]))->release();
     }
+
     _bytes_appended += bytes_req;
     Status status = _stream_sender(buf);
     header.release_load_id();

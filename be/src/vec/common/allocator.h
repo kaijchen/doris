@@ -175,7 +175,7 @@ public:
     }
 
     // Free memory range by ::free.
-    void free_no_munmap(void* buf) {
+    static void free_no_munmap(void* buf) {
         CHECK(!use_mmap);
         ::free(buf);
     }

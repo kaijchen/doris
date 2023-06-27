@@ -21,6 +21,7 @@
 #include <gen_cpp/internal_service.pb.h>
 
 #include "io/fs/file_writer.h"
+#include "vec/common/allocator.h"
 
 namespace doris {
 
@@ -32,14 +33,19 @@ public:
     StreamSinkFileWriter(brpc::StreamId stream);
     ~StreamSinkFileWriter() override;
 
-    static void deleter(void* data) {}
+    static void deleter(void* data) { Allocator<false, false, false>::free_no_munmap(data); }
 
     static Status send_with_retry(brpc::StreamId stream, butil::IOBuf buf);
 
     Status init(PUniqueId load_id, int64_t index_id, int64_t tablet_id, RowsetId rowset_id,
                 int32_t segment_id, int32_t schema_hash);
 
-    Status appendv(const Slice* data, size_t data_cnt) override;
+    Status appendv(const OwnedSlice* data, size_t data_cnt) override;
+
+    virtual Status appendv(const Slice* data, size_t data_cnt) override {
+        CHECK(false);
+        return Status::OK();
+    }
 
     Status finalize() override;
 

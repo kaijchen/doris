@@ -22,6 +22,7 @@
 
 #include "gtest/gtest_pred_impl.h"
 #include "olap/olap_common.h"
+#include "util/faststring.h"
 
 namespace doris {
 
@@ -89,8 +90,6 @@ class StreamSinkFileWriterTest : public testing::Test {
 public:
     StreamSinkFileWriterTest() {}
     ~StreamSinkFileWriterTest() {
-        delete _data;
-        delete[] _buffer;
     }
 
 protected:
@@ -148,8 +147,6 @@ protected:
     StreamingSinkFileService* _stream_service;
     brpc::StreamId _stream;
     brpc::Server _server;
-    Slice* _data = new Slice();
-    char* _buffer = new char[6];
 };
 
 TEST_F(StreamSinkFileWriterTest, TestInit) {
@@ -170,9 +167,11 @@ TEST_F(StreamSinkFileWriterTest, TestAppend) {
     RowsetId rowset_id;
     rowset_id.init("1");
     CHECK_STATUS_OK(writer.init(load_id, 1, 1, rowset_id, 1, 123));
-    strcpy(_buffer, "hello");
-    _data->data = _buffer;
-    CHECK_STATUS_OK(writer.appendv(_data, 1));
+    std::vector<OwnedSlice> slices;
+    faststring str;
+    str.assign_copy("hello");
+    slices.emplace_back(str.build());
+    CHECK_STATUS_OK(writer.appendv(&slices[0], slices.size()));
 }
 
 TEST_F(StreamSinkFileWriterTest, TestFinalize) {
