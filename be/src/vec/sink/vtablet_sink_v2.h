@@ -93,6 +93,7 @@ struct WriteMemtableTaskClosure {
     int64_t index_id;
     int64_t tablet_id;
     std::vector<int32_t> row_idxes;
+    std::vector<brpc::StreamId> streams;
 };
 
 // <tablet_id, index_id>
@@ -193,6 +194,8 @@ private:
     Status find_tablet(RuntimeState* state, vectorized::Block* block, int row_index,
                        const VOlapTablePartition** partition, uint32_t& tablet_index,
                        bool& stop_processing, bool& is_continue);
+
+    Status _select_streams(int64_t tablet_id, std::vector<brpc::StreamId>& streams);
 
     std::shared_ptr<MemTracker> _mem_tracker;
 
@@ -305,7 +308,7 @@ private:
 
     std::shared_ptr<StreamPoolForNode> _stream_pool_for_node;
     std::shared_ptr<NodeIdForStream> _node_id_for_stream;
-    size_t _stream_pool_index = 0;
+    size_t _stream_index = 0;
     std::shared_ptr<DeltaWriterForTablet> _delta_writer_for_tablet;
     std::shared_ptr<bthread::Mutex> _delta_writer_for_tablet_mutex;
     std::vector<bthread_t> _write_memtable_threads;

@@ -375,6 +375,19 @@ void VOlapTableSinkV2::_generate_rows_for_tablet(RowsForTablet& rows_for_tablet,
     }
 }
 
+Status VOlapTableSinkV2::_select_streams(int64_t tablet_id, std::vector<brpc::StreamId>& streams) {
+    auto location = _location->find_tablet(tablet_id);
+    if (location == nullptr) {
+        LOG(WARNING) << "unknown tablet, tablet_id=" << tablet_id;
+        return Status::InternalError("unknown tablet");
+    }
+    for (auto& node_id : location->node_ids) {
+        streams.push_back(_stream_pool_for_node->at(node_id)[_stream_index]);
+    }
+    _stream_index = (_stream_index + 1) % config::stream_cnt_per_sink;
+    return Status::OK();
+}
+
 Status VOlapTableSinkV2::send(RuntimeState* state, vectorized::Block* input_block, bool eos) {
     SCOPED_CONSUME_MEM_TRACKER(_mem_tracker.get());
     Status status = Status::OK();
@@ -462,6 +475,7 @@ Status VOlapTableSinkV2::send(RuntimeState* state, vectorized::Block* input_bloc
         closure->index_id = entry.first.index_id;
         closure->tablet_id = entry.first.tablet_id;
         closure->row_idxes = entry.second;
+        RETURN_IF_ERROR(_select_streams(closure->tablet_id, closure->streams));
         _opened_tablets.insert(std::make_pair(closure->tablet_id, closure->index_id));
         auto cnt = _flying_task_count.fetch_add(1) + 1;
         DLOG(INFO) << "Creating WriteMemtableTask for Tablet(tablet id: " << closure->tablet_id
@@ -502,11 +516,9 @@ void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
                 }
             }
             DeltaWriter::open(&wrequest, &delta_writer, sink->_profile, sink->_load_id);
-            for (const auto& entry : *sink->_stream_pool_for_node) {
-                brpc::StreamId stream = entry.second[sink->_stream_pool_index];
+            for (auto stream : ctx->streams) {
                 delta_writer->add_stream(stream);
             }
-            sink->_stream_pool_index = (sink->_stream_pool_index + 1) % config::stream_cnt_per_sink;
             delta_writer->register_flying_memtable_counter(sink->_flying_memtable_counter);
             sink->_delta_writer_for_tablet->insert(
                     {key, std::unique_ptr<DeltaWriter>(delta_writer)});
