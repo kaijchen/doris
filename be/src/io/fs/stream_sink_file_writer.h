@@ -34,14 +34,14 @@ public:
 
     static void deleter(void* data) {}
 
+    static Status send_with_retry(brpc::StreamId stream, butil::IOBuf buf);
+
     Status init(PUniqueId load_id, int64_t index_id, int64_t tablet_id, RowsetId rowset_id,
-                int32_t segment_id, bool is_last_segment, int32_t schema_hash);
+                int32_t segment_id, int32_t schema_hash);
 
     Status appendv(const Slice* data, size_t data_cnt) override;
 
-    Status finalize() override { return finalize(nullptr); }
-
-    Status finalize(RowsetMetaPB* rowset_meta);
+    Status finalize() override;
 
     Status close() override;
 
@@ -50,7 +50,9 @@ public:
     Status write_at(size_t offset, const Slice& data) override;
 
 private:
-    Status _stream_sender(butil::IOBuf buf);
+    Status _stream_sender(butil::IOBuf buf) const {
+        return send_with_retry(_stream, buf);
+    }
 
     brpc::StreamId _stream;
 
@@ -59,7 +61,6 @@ private:
     int64_t _tablet_id;
     RowsetId _rowset_id;
     int32_t _segment_id;
-    bool _is_last_segment;
 };
 
 } // namespace io

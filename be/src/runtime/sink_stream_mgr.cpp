@@ -89,13 +89,9 @@ SinkStreamHandler::~SinkStreamHandler() {
     }
 }
 
-Status SinkStreamHandler::_create_and_open_file(TargetSegmentPtr target_segment, std::string path,
-                                                bool is_last) {
+Status SinkStreamHandler::_create_and_open_file(TargetSegmentPtr target_segment, std::string path) {
     LOG(INFO) << "create and open file, target_segment = " << target_segment->to_string()
-              << ", path = " << path << ", is_last = " << is_last;
-    if (is_last) {
-        return Status::OK(); //last segment works as a signal, no need to create file
-    }
+              << ", path = " << path;
     int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
     if (fd < 0) {
         return Status::InternalError("open file error");
@@ -127,12 +123,8 @@ Status SinkStreamHandler::_append_data(TargetSegmentPtr target_segment,
     return Status::OK();
 }
 
-Status SinkStreamHandler::_close_file(TargetSegmentPtr target_segment, bool is_last_segment) {
-    LOG(INFO) << "close file, target_segment = " << target_segment->to_string()
-              << ", is last segment = " << is_last_segment;
-    if (is_last_segment) {
-        return Status::OK();
-    }
+Status SinkStreamHandler::_close_file(TargetSegmentPtr target_segment) {
+    LOG(INFO) << "close file, target_segment = " << target_segment->to_string();
     std::shared_ptr<io::LocalFileWriter> file_writer = nullptr;
     {
         std::lock_guard<std::mutex> l(_file_map_lock);
@@ -146,7 +138,6 @@ Status SinkStreamHandler::_close_file(TargetSegmentPtr target_segment, bool is_l
     file_writer->finalize();
     LOG(INFO) << "segment_size: " << file_writer->bytes_appended();
     file_writer->close();
-    LOG(INFO) << "OOXXOO close file, is_last_segment = " << is_last_segment << " ";
     return Status::OK();
 }
 
@@ -178,8 +169,7 @@ void SinkStreamHandler::_parse_header(butil::IOBuf* const message, PStreamHeader
               << "opcode = " << hdr.opcode() << ", loadid = " << hdr.load_id()
               << ", indexid = " << hdr.index_id() << ", tabletid = " << hdr.tablet_id()
               << ", segmentid = " << hdr.segment_id() << ", rowsetid = " << hdr.rowset_id()
-              << ", schema_hash = " << hdr.tablet_schema_hash() << ", is_last_segment = "
-              << (hdr.has_is_last_segment() ? hdr.is_last_segment() : false);
+              << ", schema_hash = " << hdr.tablet_schema_hash();
 }
 
 uint64_t SinkStreamHandler::get_next_segmentid(TargetRowsetPtr target_rowset) {
@@ -243,11 +233,6 @@ void SinkStreamHandler::_handle_message(StreamId stream, PStreamHeader hdr,
     Status s = Status::OK();
     std::string path;
     TabletSharedPtr tablet = nullptr;
-    bool is_last = false;
-
-    if (hdr.has_is_last_segment() && hdr.is_last_segment()) {
-        is_last = true;
-    }
 
     switch (hdr.opcode()) {
     case PStreamHeader::OPEN_FILE:
@@ -262,22 +247,22 @@ void SinkStreamHandler::_handle_message(StreamId stream, PStreamHeader hdr,
         (void)tablet;
         path = message->to_string();
 #endif
-        s = _create_and_open_file(target_segment, path, is_last);
+        s = _create_and_open_file(target_segment, path);
         break;
     case PStreamHeader::APPEND_DATA:
         s = _append_data(target_segment, message);
         break;
     case PStreamHeader::CLOSE_FILE:
-        s = _close_file(target_segment, is_last);
-        if (is_last) {
-            DCHECK(hdr.has_rowset_meta());
+        s = _close_file(target_segment);
+        break;
+    case PStreamHeader::CLOSE_STREAM:
+        DCHECK(hdr.has_rowset_meta());
 #ifndef BE_TEST
-            s = _build_rowset(target_rowset, hdr.rowset_meta());
-            if (s.ok()) {
-                return _report_status(stream, target_rowset, true, s.to_string());
-            }
-#endif
+        s = _build_rowset(target_rowset, hdr.rowset_meta());
+        if (s.ok()) {
+            return _report_status(stream, target_rowset, true, s.to_string());
         }
+#endif
         break;
     default:
         DCHECK(false);

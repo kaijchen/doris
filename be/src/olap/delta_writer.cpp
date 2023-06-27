@@ -725,17 +725,25 @@ void DeltaWriter::finish_slave_tablet_pull_rowset(int64_t node_id, bool is_succe
 Status DeltaWriter::_notify_last_segment() {
     DCHECK(config::experimental_olap_table_sink_v2);
 
-    LOG(INFO) << "notifying last segment";
-    // send a dummy segment as a signal for closing stream
-    auto stream_id = *_streams.begin();
-    auto stream_writer = std::make_unique<io::StreamSinkFileWriter>(stream_id);
-    int32_t segment_id = -1;
-    bool is_last_segment = true;
-
-    stream_writer->init(_req.load_id, _req.index_id, _req.tablet_id, _cur_rowset->rowset_id(),
-                        segment_id, is_last_segment, _req.schema_hash);
+    brpc::StreamId stream = *_streams.begin();
     RowsetMetaPB rowset_meta_pb = _cur_rowset->rowset_meta()->get_rowset_pb();
-    stream_writer->finalize(&rowset_meta_pb);
+
+    butil::IOBuf buf;
+    PStreamHeader header;
+    header.set_allocated_load_id(&_req.load_id);
+    header.set_index_id(_req.index_id);
+    header.set_tablet_id(_req.tablet_id);
+    header.set_rowset_id(_cur_rowset->rowset_id().to_string());
+    header.set_opcode(doris::PStreamHeader::CLOSE_STREAM);
+    header.set_allocated_rowset_meta(&rowset_meta_pb);
+    size_t header_len = header.ByteSizeLong();
+    buf.append(reinterpret_cast<uint8_t*>(&header_len), sizeof(header_len));
+    buf.append(header.SerializeAsString());
+
+    io::StreamSinkFileWriter::send_with_retry(stream, buf);
+
+    header.release_load_id();
+    header.release_rowset_meta();
     return Status::OK();
 }
 

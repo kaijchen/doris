@@ -225,7 +225,6 @@ TEST_F(SinkStreamMgrTest, open_append_close_file_twice) {
         header.set_segment_id(4);
         header.set_tablet_schema_hash(5);
         header.set_rowset_id("6");
-        header.set_is_last_segment(false);
         size_t hdr_len = header.ByteSizeLong();
         std::cerr << "on client side: hdr_len = " << hdr_len << std::endl;
         open_buf.append((char*)&hdr_len, sizeof(size_t));
@@ -250,7 +249,6 @@ TEST_F(SinkStreamMgrTest, open_append_close_file_twice) {
         header.set_index_id(2);
         header.set_tablet_id(3);
         header.set_segment_id(4);
-        header.set_is_last_segment(false);
         size_t hdr_len = header.ByteSizeLong();
         append_buf.append((char*)&hdr_len, sizeof(size_t));
         append_buf.append(header.SerializeAsString());
@@ -272,7 +270,6 @@ TEST_F(SinkStreamMgrTest, open_append_close_file_twice) {
         header.set_index_id(2);
         header.set_tablet_id(3);
         header.set_segment_id(4);
-        header.set_is_last_segment(false);
         size_t hdr_len = header.ByteSizeLong();
         close_buf.append((char*)&hdr_len, sizeof(size_t));
         close_buf.append(header.SerializeAsString());
@@ -307,7 +304,6 @@ TEST_F(SinkStreamMgrTest, open_append_close_file_twice) {
         header.set_segment_id(5);
         header.set_tablet_schema_hash(5);
         header.set_rowset_id("6");
-        header.set_is_last_segment(false);
         size_t hdr_len = header.ByteSizeLong();
         std::cerr << "on client side: hdr_len = " << hdr_len << std::endl;
         open_buf.append((char*)&hdr_len, sizeof(size_t));
@@ -332,7 +328,6 @@ TEST_F(SinkStreamMgrTest, open_append_close_file_twice) {
         header.set_index_id(2);
         header.set_tablet_id(3);
         header.set_segment_id(5);
-        header.set_is_last_segment(false);
         size_t hdr_len = header.ByteSizeLong();
         append_buf.append((char*)&hdr_len, sizeof(size_t));
         append_buf.append(header.SerializeAsString());
@@ -354,7 +349,6 @@ TEST_F(SinkStreamMgrTest, open_append_close_file_twice) {
         header.set_index_id(2);
         header.set_tablet_id(3);
         header.set_segment_id(5);
-        header.set_is_last_segment(false);
         size_t hdr_len = header.ByteSizeLong();
         close_buf.append((char*)&hdr_len, sizeof(size_t));
         close_buf.append(header.SerializeAsString());
@@ -376,52 +370,20 @@ TEST_F(SinkStreamMgrTest, open_append_close_file_twice) {
     std::stringstream path3;
     path3 << zTestDir << "/" << std::to_string(1049);
 
-    /************** OPEN FILE **************/
-    {
-        std::cerr << "openfile" << std::endl;
-        butil::IOBuf open_buf;
-        PStreamHeader header;
-        header.set_opcode(PStreamHeader::OPEN_FILE);
-        std::shared_ptr<PUniqueId> loadid = std::make_shared<PUniqueId>();
-        loadid->set_hi(1);
-        loadid->set_lo(1);
-        header.set_allocated_load_id(loadid.get());
-        header.set_index_id(2);
-        header.set_tablet_id(3);
-        header.set_segment_id(6);
-        header.set_tablet_schema_hash(5);
-        header.set_rowset_id("6");
-        header.set_is_last_segment(true);                     // change it to true when last segment
-        header.set_allocated_rowset_meta(new RowsetMetaPB()); // last segment has rowset meta
-        int64_t rowset_id = 1;
-        header.mutable_rowset_meta()->set_rowset_id(rowset_id);
-        size_t hdr_len = header.ByteSizeLong();
-        std::cerr << "on client side: hdr_len = " << hdr_len << std::endl;
-        open_buf.append((char*)&hdr_len, sizeof(size_t));
-        open_buf.append(header.SerializeAsString());
-        open_buf.append(path3.str());
-        client.send(&open_buf);
-        sleep(2);
-        CHECK_EQ(true, std::filesystem::exists(path3.str()));
-        header.release_load_id();
-    }
-
-    // no append for last segment, otherwise it will fail of 'no file found'
-
-    /************* CLOSE FILE **************/
+    /************* CLOSE STREAM **************/
     {
         butil::IOBuf close_buf;
         PStreamHeader header;
-        header.set_opcode(PStreamHeader::CLOSE_FILE);
+        header.set_opcode(PStreamHeader::CLOSE_STREAM);
         std::shared_ptr<PUniqueId> loadid = std::make_shared<PUniqueId>();
         loadid->set_hi(1);
         loadid->set_lo(1);
         header.set_allocated_load_id(loadid.get());
         header.set_index_id(2);
         header.set_tablet_id(3);
-        header.set_segment_id(5);
-        header.set_is_last_segment(true);                     // change it to true when last segment
-        header.set_allocated_rowset_meta(new RowsetMetaPB()); // last segment has rowset meta
+        header.set_tablet_schema_hash(5);
+        // no segment id, but require rowset_meta
+        header.set_allocated_rowset_meta(new RowsetMetaPB());
         int64_t rowset_id = 1;
         header.mutable_rowset_meta()->set_rowset_id(rowset_id);
         size_t hdr_len = header.ByteSizeLong();

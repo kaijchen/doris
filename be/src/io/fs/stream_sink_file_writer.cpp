@@ -29,18 +29,16 @@ StreamSinkFileWriter::StreamSinkFileWriter(brpc::StreamId stream_id) : _stream(s
 StreamSinkFileWriter::~StreamSinkFileWriter() {}
 
 Status StreamSinkFileWriter::init(PUniqueId load_id, int64_t index_id, int64_t tablet_id,
-                                  RowsetId rowset_id, int32_t segment_id, bool is_last_segment,
-                                  int32_t schema_hash) {
+                                  RowsetId rowset_id, int32_t segment_id, int32_t schema_hash) {
     LOG(INFO) << "init stream writer, load id(" << UniqueId(load_id).to_string() << "), index id("
               << index_id << "), tablet_id(" << tablet_id << "), rowset id("
-              << rowset_id.to_string() << "), segment_id(" << segment_id << "), last segment("
-              << is_last_segment << "), schema_hash(" << schema_hash << ")";
+              << rowset_id.to_string() << "), segment_id(" << segment_id << "), schema_hash("
+              << schema_hash << ")";
     _load_id = load_id;
     _index_id = index_id;
     _tablet_id = tablet_id;
     _rowset_id = rowset_id;
     _segment_id = segment_id;
-    _is_last_segment = is_last_segment;
 
     butil::IOBuf buf;
     PStreamHeader header;
@@ -49,7 +47,6 @@ Status StreamSinkFileWriter::init(PUniqueId load_id, int64_t index_id, int64_t t
     header.set_tablet_id(_tablet_id);
     header.set_rowset_id(_rowset_id.to_string());
     header.set_segment_id(_segment_id);
-    header.set_is_last_segment(_is_last_segment);
     header.set_opcode(PStreamHeader::OPEN_FILE);
     header.set_tablet_schema_hash(schema_hash);
     size_t header_len = header.ByteSizeLong();
@@ -76,7 +73,6 @@ Status StreamSinkFileWriter::appendv(const Slice* data, size_t data_cnt) {
     header.set_tablet_id(_tablet_id);
     header.set_rowset_id(_rowset_id.to_string());
     header.set_segment_id(_segment_id);
-    header.set_is_last_segment(_is_last_segment);
     header.set_opcode(header.APPEND_DATA);
     size_t header_len = header.ByteSizeLong();
 
@@ -92,10 +88,10 @@ Status StreamSinkFileWriter::appendv(const Slice* data, size_t data_cnt) {
     return status;
 }
 
-Status StreamSinkFileWriter::finalize(RowsetMetaPB* rowset_meta) {
+Status StreamSinkFileWriter::finalize() {
     LOG(INFO) << "writer finalize, load_id: " << UniqueId(_load_id).to_string()
               << ", index_id: " << _index_id << ", tablet_id: " << _tablet_id
-              << ", segment_id: " << _segment_id << ", rowset_meta = " << rowset_meta;
+              << ", segment_id: " << _segment_id;
     butil::IOBuf buf;
     PStreamHeader header;
     header.set_allocated_load_id(&_load_id);
@@ -103,12 +99,7 @@ Status StreamSinkFileWriter::finalize(RowsetMetaPB* rowset_meta) {
     header.set_tablet_id(_tablet_id);
     header.set_rowset_id(_rowset_id.to_string());
     header.set_segment_id(_segment_id);
-    header.set_is_last_segment(_is_last_segment);
     header.set_opcode(header.CLOSE_FILE);
-    if (_is_last_segment) {
-        DCHECK(rowset_meta != nullptr);
-        header.set_allocated_rowset_meta(rowset_meta);
-    }
     size_t header_len = header.ByteSizeLong();
 
     LOG(INFO) << "segment_size: " << _bytes_appended;
@@ -117,18 +108,15 @@ Status StreamSinkFileWriter::finalize(RowsetMetaPB* rowset_meta) {
     buf.append(header.SerializeAsString());
     Status status = _stream_sender(buf);
     header.release_load_id();
-    if (_is_last_segment) {
-        header.release_rowset_meta();
-    }
     return status;
 }
 
-Status StreamSinkFileWriter::_stream_sender(butil::IOBuf buf) {
+Status StreamSinkFileWriter::send_with_retry(brpc::StreamId stream, butil::IOBuf buf) {
     while (true) {
-        int ret = brpc::StreamWrite(_stream, buf);
+        int ret = brpc::StreamWrite(stream, buf);
         if (ret == EAGAIN) {
             const timespec time = butil::seconds_from_now(60);
-            int wait_result = brpc::StreamWait(_stream, &time);
+            int wait_result = brpc::StreamWait(stream, &time);
             if (wait_result == 0) {
                 continue;
             } else {
