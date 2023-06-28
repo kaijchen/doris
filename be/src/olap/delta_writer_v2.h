@@ -55,32 +55,33 @@ namespace vectorized {
 class Block;
 } // namespace vectorized
 
-enum WriteType { LOAD = 1, LOAD_DELETE = 2, DELETE = 3 };
-enum MemType { WRITE = 1, FLUSH = 2, ALL = 3 };
-
-struct WriteRequest {
-    int64_t tablet_id;
-    int32_t schema_hash;
-    WriteType write_type;
-    int64_t txn_id;
-    int64_t partition_id;
-    PUniqueId load_id;
-    TupleDescriptor* tuple_desc;
-    // slots are in order of tablet's schema
-    const std::vector<SlotDescriptor*>* slots;
-    bool is_high_priority = false;
-    OlapTableSchemaParam* table_schema_param;
-    int64_t index_id = 0;
-};
 
 // Writer for a particular (load, index, tablet).
 // This class is NOT thread-safe, external synchronization is required.
-class DeltaWriter {
+class DeltaWriterV2 {
 public:
-    static Status open(WriteRequest* req, DeltaWriter** writer, RuntimeProfile* profile,
+    enum WriteType { LOAD = 1, LOAD_DELETE = 2, DELETE = 3 };
+    enum MemType { WRITE = 1, FLUSH = 2, ALL = 3 };
+
+    struct WriteRequest {
+        int64_t tablet_id;
+        int32_t schema_hash;
+        WriteType write_type;
+        int64_t txn_id;
+        int64_t partition_id;
+        PUniqueId load_id;
+        TupleDescriptor* tuple_desc;
+        // slots are in order of tablet's schema
+        const std::vector<SlotDescriptor*>* slots;
+        bool is_high_priority = false;
+        OlapTableSchemaParam* table_schema_param;
+        int64_t index_id = 0;
+    };
+
+    static Status open(WriteRequest* req, DeltaWriterV2** writer, RuntimeProfile* profile,
                        const UniqueId& load_id = TUniqueId());
 
-    ~DeltaWriter();
+    ~DeltaWriterV2();
 
     Status init();
 
@@ -93,13 +94,7 @@ public:
     Status close();
     // wait for all memtables to be flushed.
     // mem_consumption() should be 0 after this function returns.
-    Status close_wait(const PSlaveTabletNodes& slave_tablet_nodes, const bool write_single_replica);
-
-    bool check_slave_replicas_done(google::protobuf::Map<int64_t, PSuccessSlaveTabletNodeIds>*
-                                           success_slave_tablet_node_ids);
-
-    void add_finished_slave_replicas(google::protobuf::Map<int64_t, PSuccessSlaveTabletNodeIds>*
-                                             success_slave_tablet_node_ids);
+    Status close_wait();
 
     // abandon current memtable and wait for all pending-flushing memtables to be destructed.
     // mem_consumption() should be 0 after this function returns.
@@ -125,16 +120,22 @@ public:
 
     int32_t schema_hash() { return _tablet->schema_hash(); }
 
-    void finish_slave_tablet_pull_rowset(int64_t node_id, bool is_succeed);
-
     int64_t total_received_rows() const { return _total_received_rows; }
 
+    void add_stream(brpc::StreamId stream) { _streams.push_back(stream); }
+
+    void register_flying_memtable_counter(std::shared_ptr<std::atomic<int32_t>> counter) {
+        _flying_memtable_counter = counter;
+    }
+
 private:
-    DeltaWriter(WriteRequest* req, StorageEngine* storage_engine, RuntimeProfile* profile,
+    DeltaWriterV2(WriteRequest* req, StorageEngine* storage_engine, RuntimeProfile* profile,
                 const UniqueId& load_id);
 
     // push a full memtable to flush executor
     Status _flush_memtable_async();
+
+    Status _notify_last_segment();
 
     void _garbage_collection();
 
@@ -143,8 +144,6 @@ private:
     void _build_current_tablet_schema(int64_t index_id,
                                       const OlapTableSchemaParam* table_schema_param,
                                       const TabletSchema& ori_tablet_schema);
-
-    void _request_slave_tablet_pull_rowset(PNodeInfo node_info);
 
     void _init_profile(RuntimeProfile* profile);
 
@@ -176,17 +175,13 @@ private:
 
     std::mutex _lock;
 
-    std::unordered_set<int64_t> _unfinished_slave_node;
-    PSuccessSlaveTabletNodeIds _success_slave_node_ids;
-    std::shared_mutex _slave_node_lock;
-
     DeleteBitmapPtr _delete_bitmap = nullptr;
     // current rowset_ids, used to do diff in publish_version
     RowsetIdUnorderedSet _rowset_ids;
     // current max version, used to calculate delete bitmap
     int64_t _cur_max_version;
 
-    // total rows num written by DeltaWriter
+    // total rows num written by DeltaWriterV2
     int64_t _total_received_rows = 0;
 
     RuntimeProfile* _profile = nullptr;
@@ -201,6 +196,8 @@ private:
     RuntimeProfile::Counter* _sort_times = nullptr;
     RuntimeProfile::Counter* _agg_times = nullptr;
     RuntimeProfile::Counter* _close_wait_timer = nullptr;
+    RuntimeProfile::Counter* _rowset_build_timer = nullptr;
+    RuntimeProfile::Counter* _commit_txn_timer = nullptr;
     RuntimeProfile::Counter* _segment_num = nullptr;
     RuntimeProfile::Counter* _raw_rows_num = nullptr;
     RuntimeProfile::Counter* _merged_rows_num = nullptr;
@@ -208,6 +205,10 @@ private:
     MonotonicStopWatch _lock_watch;
 
     MemTableStat _memtable_stat;
+
+    std::vector<brpc::StreamId> _streams;
+
+    std::shared_ptr<std::atomic<int32_t>> _flying_memtable_counter;
 };
 
 } // namespace doris

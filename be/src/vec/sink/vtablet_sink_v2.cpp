@@ -46,7 +46,7 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exec/tablet_info.h"
-#include "olap/delta_writer.h"
+#include "olap/delta_writer_v2.h"
 #include "runtime/define_primitive_type.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -490,19 +490,19 @@ Status VOlapTableSinkV2::send(RuntimeState* state, vectorized::Block* input_bloc
 void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
     auto ctx = static_cast<WriteMemtableTaskClosure*>(closure);
     VOlapTableSinkV2* sink = ctx->sink;
-    DeltaWriter* delta_writer = nullptr;
+    DeltaWriterV2* delta_writer = nullptr;
     {
         std::lock_guard<bthread::Mutex> l(*sink->_delta_writer_for_tablet_mutex);
         auto key = std::make_pair(ctx->tablet_id, ctx->index_id);
         auto it = sink->_delta_writer_for_tablet->find(key);
         if (it == sink->_delta_writer_for_tablet->end()) {
-            DLOG(INFO) << "Creating DeltaWriter for Tablet(tablet id: " << ctx->tablet_id
+            DLOG(INFO) << "Creating DeltaWriterV2 for Tablet(tablet id: " << ctx->tablet_id
                        << ", index id: " << ctx->index_id << ")";
-            WriteRequest wrequest;
+            DeltaWriterV2::WriteRequest wrequest;
             wrequest.partition_id = ctx->partition_id;
             wrequest.index_id = ctx->index_id;
             wrequest.tablet_id = ctx->tablet_id;
-            wrequest.write_type = WriteType::LOAD;
+            wrequest.write_type = DeltaWriterV2::WriteType::LOAD;
             wrequest.txn_id = sink->_txn_id;
             wrequest.load_id = sink->_load_id;
             wrequest.tuple_desc = sink->_output_tuple_desc;
@@ -515,15 +515,15 @@ void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
                     break;
                 }
             }
-            DeltaWriter::open(&wrequest, &delta_writer, sink->_profile, sink->_load_id);
+            DeltaWriterV2::open(&wrequest, &delta_writer, sink->_profile, sink->_load_id);
             for (auto stream : ctx->streams) {
                 delta_writer->add_stream(stream);
             }
             delta_writer->register_flying_memtable_counter(sink->_flying_memtable_counter);
             sink->_delta_writer_for_tablet->insert(
-                    {key, std::unique_ptr<DeltaWriter>(delta_writer)});
+                    {key, std::unique_ptr<DeltaWriterV2>(delta_writer)});
         } else {
-            DLOG(INFO) << "Reusing DeltaWriter for Tablet(tablet id: " << ctx->tablet_id
+            DLOG(INFO) << "Reusing DeltaWriterV2 for Tablet(tablet id: " << ctx->tablet_id
                        << ", index id: " << ctx->index_id << ")";
             delta_writer = it->second.get();
         }
@@ -533,7 +533,7 @@ void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
     DLOG(INFO) << "Finished writing Tablet(tablet id: " << ctx->tablet_id
                << ", index id: " << ctx->index_id << "), flying task count: " << cnt;
     delete ctx;
-    DCHECK_EQ(st, Status::OK()) << "DeltaWriter::write failed";
+    DCHECK_EQ(st, Status::OK()) << "DeltaWriterV2::write failed";
     return nullptr;
 }
 
@@ -570,7 +570,7 @@ Status VOlapTableSinkV2::close(RuntimeState* state, Status exec_status) {
                 entry.second->close();
             }
             for (const auto& entry : *_delta_writer_for_tablet) {
-                entry.second->close_wait(PSlaveTabletNodes {}, false);
+                entry.second->close_wait();
             }
         }
         _delta_writer_for_tablet.reset();

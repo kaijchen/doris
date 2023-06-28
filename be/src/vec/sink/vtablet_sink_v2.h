@@ -70,7 +70,7 @@
 #include "runtime/vtablet_sink_v2_mgr.h"
 
 namespace doris {
-class DeltaWriter;
+class DeltaWriterV2;
 class ObjectPool;
 class RowDescriptor;
 class RuntimeState;
@@ -98,7 +98,7 @@ struct WriteMemtableTaskClosure {
 
 // <tablet_id, index_id>
 using TabletID = std::pair<int64_t, int64_t>;
-using DeltaWriterForTablet = std::unordered_map<TabletID, std::unique_ptr<DeltaWriter>>;
+using DeltaWriterForTablet = std::unordered_map<TabletID, std::unique_ptr<DeltaWriterV2>>;
 using StreamPool = std::vector<brpc::StreamId>;
 using StreamPoolForNode = std::unordered_map<int64_t, StreamPool>;
 using NodeIdForStream = std::unordered_map<brpc::StreamId, int64_t>;
