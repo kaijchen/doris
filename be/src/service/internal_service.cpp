@@ -259,6 +259,20 @@ void PInternalServiceImpl::open_stream_sink(google::protobuf::RpcController* con
     std::unique_ptr<PStatus> status = std::make_unique<PStatus>();
     brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
     brpc::StreamOptions stream_options;
+
+    if (request->has_tablet_id()) {
+        TabletManager* tablet_mgr = StorageEngine::instance()->tablet_manager();
+        TabletSharedPtr tablet = tablet_mgr->get_tablet(request->tablet_id());
+        if (tablet == nullptr) {
+            cntl->SetFailed("Tablet not found");
+            status->set_status_code(TStatusCode::NOT_FOUND);
+            response->set_allocated_status(status.get());
+            response->release_status();
+            return;
+        }
+        tablet->tablet_schema()->to_schema_pb(response->mutable_tablet_schema());
+    }
+
     ExecEnv* env = ExecEnv::GetInstance();
     SinkStreamMgr* sink_stream_mgr = env->get_sink_stream_mgr();
 

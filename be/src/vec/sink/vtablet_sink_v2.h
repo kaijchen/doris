@@ -221,6 +221,7 @@ private:
 
     // TODO(zc): think about cache this data
     std::shared_ptr<OlapTableSchemaParam> _schema;
+    std::shared_ptr<TabletSchema> _tablet_schema;
     OlapTableLocationParam* _location = nullptr;
     bool _write_single_replica = false;
     OlapTableLocationParam* _slave_location = nullptr;

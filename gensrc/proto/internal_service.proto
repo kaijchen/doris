@@ -681,10 +681,12 @@ message PGetTabletVersionsResponse {
 // open stream sink
 message POpenStreamSinkRequest {
     optional PUniqueId id = 1;
+    optional int64 tablet_id = 2;
 };
 
 message POpenStreamSinkResponse {
     optional PStatus status = 1;
+    optional TabletSchemaPB tablet_schema = 2;
 };
 
 message PWriteStreamSinkResponse {
