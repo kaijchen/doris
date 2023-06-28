@@ -40,6 +40,10 @@ VOlapTableSinkV2Mgr::VOlapTableSinkV2Mgr() {}
 
 VOlapTableSinkV2Mgr::~VOlapTableSinkV2Mgr() {
     DEREGISTER_HOOK_METRIC(tablet_sink_v2_mem_consumption);
+    for (auto writer : _writers) {
+        writer.reset();
+    }
+    _writers.clear();
 }
 
 Status VOlapTableSinkV2Mgr::init(int64_t process_mem_limit) {
@@ -68,6 +72,7 @@ void VOlapTableSinkV2Mgr::handle_memtable_flush() {
     // Record current memory status.
     int64_t process_soft_mem_limit = MemInfo::soft_mem_limit();
     int64_t proc_mem_no_allocator_cache = MemInfo::proc_mem_no_allocator_cache();
+#ifndef BE_TEST
     // If process memory is almost full but data load don't consume more than 5% (50% * 10%) of
     // total memory, we don't need to flush memtable.
     bool reduce_on_process_soft_mem_limit =
@@ -76,11 +81,11 @@ void VOlapTableSinkV2Mgr::handle_memtable_flush() {
     if (_mem_tracker->consumption() < _load_soft_mem_limit && !reduce_on_process_soft_mem_limit) {
         return;
     }
+#endif
     // Indicate whether current thread is reducing mem on hard limit.
     bool reducing_mem_on_hard_limit = false;
     // tuple<DeltaWriter, mem_size>
-    std::vector<std::tuple<std::shared_ptr<DeltaWriter>, int64_t>>
-            writers_to_reduce_mem;
+    std::vector<std::tuple<std::shared_ptr<DeltaWriter>, int64_t>> writers_to_reduce_mem;
     {
         MonotonicStopWatch timer;
         timer.start();
@@ -91,6 +96,7 @@ void VOlapTableSinkV2Mgr::handle_memtable_flush() {
         LOG(INFO) << "Reached the load hard limit " << _load_hard_mem_limit
                   << ", waited for flush, time_ns:" << timer.elapsed_time();
 
+#ifndef BE_TEST
         bool hard_limit_reached = _mem_tracker->consumption() >= _load_hard_mem_limit ||
                                   proc_mem_no_allocator_cache >= process_soft_mem_limit;
         // Some other thread is flushing data, and not reached hard limit now,
@@ -98,20 +104,21 @@ void VOlapTableSinkV2Mgr::handle_memtable_flush() {
         if (_soft_reduce_mem_in_progress && !hard_limit_reached) {
             return;
         }
-
+#endif
         // tuple<DeltaWriter, mem size>
         using WriterMemItem = std::tuple<std::shared_ptr<DeltaWriter>, int64_t>;
         auto cmp = [](WriterMemItem& lhs, WriterMemItem& rhs) {
             return std::get<1>(lhs) > std::get<1>(rhs);
         };
-        std::priority_queue<WriterMemItem, std::vector<WriterMemItem>, decltype(cmp)> mem_heap(
-                cmp);
+        std::priority_queue<WriterMemItem, std::vector<WriterMemItem>, decltype(cmp)> mem_heap(cmp);
 
         for (auto& writer : _writers) {
             int64_t active_memtable_mem = writer->active_memtable_mem_consumption();
             mem_heap.emplace(writer, active_memtable_mem);
         }
+#ifndef BE_TEST
         int64_t mem_to_flushed = _mem_tracker->consumption() / 10;
+#endif
         int64_t mem_consumption_in_picked_writer = 0;
         while (!mem_heap.empty()) {
             WriterMemItem mem_item = mem_heap.top();
@@ -120,12 +127,13 @@ void VOlapTableSinkV2Mgr::handle_memtable_flush() {
             writers_to_reduce_mem.emplace_back(writer, mem_size);
             writer->flush_memtable_and_wait(false);
             mem_consumption_in_picked_writer += std::get<1>(mem_item);
+#ifndef BE_TEST
             if (mem_consumption_in_picked_writer > mem_to_flushed) {
                 break;
             }
+#endif
             mem_heap.pop();
         }
-
         if (writers_to_reduce_mem.empty()) {
             // should not happen, add log to observe
             LOG(WARNING) << "failed to find suitable writers to reduce memory"

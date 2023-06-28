@@ -89,8 +89,7 @@ class StreamSinkFileWriterTest : public testing::Test {
 
 public:
     StreamSinkFileWriterTest() {}
-    ~StreamSinkFileWriterTest() {
-    }
+    ~StreamSinkFileWriterTest() {}
 
 protected:
     virtual void SetUp() {

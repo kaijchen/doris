@@ -3,9 +3,9 @@
 #include <stdint.h>
 
 #include "common/status.h"
+#include "olap/delta_writer.h"
 #include "runtime/memory/mem_tracker_limiter.h"
 #include "util/countdown_latch.h"
-#include "olap/delta_writer.h"
 
 namespace doris {
 class VOlapTableSinkV2Mgr {

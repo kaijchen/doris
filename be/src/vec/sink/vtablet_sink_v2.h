@@ -57,6 +57,7 @@
 #include "runtime/memory/mem_tracker.h"
 #include "runtime/thread_context.h"
 #include "runtime/types.h"
+#include "runtime/vtablet_sink_v2_mgr.h"
 #include "util/bitmap.h"
 #include "util/countdown_latch.h"
 #include "util/runtime_profile.h"
@@ -67,7 +68,6 @@
 #include "vec/core/block.h"
 #include "vec/data_types/data_type.h"
 #include "vec/exprs/vexpr_fwd.h"
-#include "runtime/vtablet_sink_v2_mgr.h"
 
 namespace doris {
 class DeltaWriterV2;

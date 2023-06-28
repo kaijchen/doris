@@ -56,9 +56,7 @@ public:
     Status write_at(size_t offset, const Slice& data) override;
 
 private:
-    Status _stream_sender(butil::IOBuf buf) const {
-        return send_with_retry(_stream, buf);
-    }
+    Status _stream_sender(butil::IOBuf buf) const { return send_with_retry(_stream, buf); }
 
     brpc::StreamId _stream;
 
