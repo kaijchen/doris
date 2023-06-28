@@ -727,12 +727,12 @@ Status ScalarColumnWriter::finish_current_page() {
         if (has_null) {
             OwnedSlice tmp_map(std::move(body.back()));
             body.pop_back();
-            OwnedSlice tmp_value(std::move(body.back()));;
+            OwnedSlice tmp_value(std::move(body.back()));
             body.pop_back();
             page->data.emplace_back(std::move(tmp_value));
             page->data.emplace_back(std::move(tmp_map));
         } else {
-            OwnedSlice tmp_value(std::move(body.back()));;
+            OwnedSlice tmp_value(std::move(body.back()));
             body.pop_back();
             page->data.emplace_back(std::move(tmp_value));
         }
