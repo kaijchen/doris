@@ -101,7 +101,7 @@ public:
 
     // Maybe modified by local schema change
     vectorized::schema_util::LocalSchemaChangeRecorder* mutable_schema_change_recorder() override {
-        return _context.schema_change_recorder.get();
+        return nullptr;
     }
 
     bool is_doing_segcompaction() const override { return false; }
