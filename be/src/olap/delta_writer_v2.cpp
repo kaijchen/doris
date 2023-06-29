@@ -157,22 +157,6 @@ Status DeltaWriterV2::init() {
         return Status::Error<TABLE_NOT_FOUND>();
     }
 
-    // check tablet version number
-    if (!config::disable_auto_compaction &&
-        _tablet->exceed_version_limit(config::max_tablet_version_num - 100) &&
-        !MemInfo::is_exceed_soft_mem_limit(GB_EXCHANGE_BYTE)) {
-        //trigger compaction
-        StorageEngine::instance()->submit_compaction_task(
-                _tablet, CompactionType::CUMULATIVE_COMPACTION, true);
-        if (_tablet->version_count() > config::max_tablet_version_num) {
-            LOG(WARNING) << "failed to init delta writer. version count: "
-                         << _tablet->version_count()
-                         << ", exceed limit: " << config::max_tablet_version_num
-                         << ". tablet: " << _tablet->full_name();
-            return Status::Error<TOO_MANY_VERSION>();
-        }
-    }
-
     {
         std::shared_lock base_migration_rlock(_tablet->get_migration_lock(), std::try_to_lock);
         if (!base_migration_rlock.owns_lock()) {
