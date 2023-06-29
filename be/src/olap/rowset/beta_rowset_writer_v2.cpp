@@ -232,9 +232,6 @@ Status BetaRowsetWriterV2::flush_single_memtable(const vectorized::Block* block,
         DCHECK_EQ(writer.get(), raw_writer);
     }
     RETURN_IF_ERROR(_flush_segment_writer(&writer, flush_size));
-    if (ctx != nullptr && ctx->generate_delete_bitmap) {
-        RETURN_IF_ERROR(ctx->generate_delete_bitmap(segment_id));
-    }
     return Status::OK();
 }
 
@@ -376,21 +373,6 @@ void BetaRowsetWriterV2::_build_rowset_meta(std::shared_ptr<RowsetMeta> rowset_m
     } else {
         rowset_meta->set_rowset_state(VISIBLE);
     }
-}
-
-RowsetSharedPtr BetaRowsetWriterV2::build_tmp() {
-    std::shared_ptr<RowsetMeta> rowset_meta_ = std::make_shared<RowsetMeta>();
-    *rowset_meta_ = *_rowset_meta;
-    _build_rowset_meta(rowset_meta_);
-
-    RowsetSharedPtr rowset;
-    auto status = RowsetFactory::create_rowset(_context.tablet_schema, _context.rowset_dir,
-                                               rowset_meta_, &rowset);
-    if (!status.ok()) {
-        LOG(WARNING) << "rowset init failed when build new rowset, res=" << status;
-        return nullptr;
-    }
-    return rowset;
 }
 
 Status BetaRowsetWriterV2::_do_create_segment_writer(

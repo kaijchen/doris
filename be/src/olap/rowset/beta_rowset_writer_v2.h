@@ -81,10 +81,6 @@ public:
 
     RowsetSharedPtr build() override;
 
-    // build a tmp rowset for load segment to calc delete_bitmap
-    // for this segment
-    RowsetSharedPtr build_tmp() override;
-
     RowsetSharedPtr manual_build(const RowsetMetaSharedPtr& rowset_meta) override;
 
     Version version() override { return _context.version; }

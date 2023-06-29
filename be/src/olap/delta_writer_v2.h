@@ -156,7 +156,6 @@ private:
     std::unique_ptr<BetaRowsetWriterV2> _rowset_writer;
     // TODO: Recheck the lifetime of _mem_table, Look should use unique_ptr
     std::unique_ptr<MemTable> _mem_table;
-    std::unique_ptr<Schema> _schema;
     //const TabletSchema* _tablet_schema;
     // tablet schema owned by delta writer, all write will use this tablet schema
     // it's build from tablet_schema（stored when create tablet） and OlapTableSchema
@@ -188,7 +187,6 @@ private:
     RuntimeProfile::Counter* _sort_timer = nullptr;
     RuntimeProfile::Counter* _agg_timer = nullptr;
     RuntimeProfile::Counter* _wait_flush_timer = nullptr;
-    RuntimeProfile::Counter* _delete_bitmap_timer = nullptr;
     RuntimeProfile::Counter* _segment_writer_timer = nullptr;
     RuntimeProfile::Counter* _memtable_duration_timer = nullptr;
     RuntimeProfile::Counter* _put_into_output_timer = nullptr;
