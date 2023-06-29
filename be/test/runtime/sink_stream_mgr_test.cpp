@@ -400,4 +400,33 @@ TEST_F(SinkStreamMgrTest, open_append_close_file_twice) {
     client.disconnect();
 }
 
+TEST_F(SinkStreamMgrTest, get_next_segment_id) {
+    PUniqueId loadid;
+    loadid.set_hi(1);
+    loadid.set_lo(1);
+    RowsetId rowsetid;
+    rowsetid.init(1);
+
+    TargetRowsetPtr target_rowset = std::make_shared<TargetRowset>();
+    target_rowset->indexid = 1;
+    target_rowset->loadid = loadid;
+    target_rowset->tabletid = 1;
+    target_rowset->rowsetid = rowsetid;
+
+    SinkStreamHandler handler;
+
+    //test order
+    CHECK_EQ(0, handler.get_next_segmentid(target_rowset, 0, 1));
+    CHECK_EQ(1, handler.get_next_segmentid(target_rowset, 1, 1));
+    // test disorder
+    CHECK_EQ(4, handler.get_next_segmentid(target_rowset, 4, 1));
+    CHECK_EQ(2, handler.get_next_segmentid(target_rowset, 2, 1));
+    // test multiple be concurrent writes
+    CHECK_EQ(6, handler.get_next_segmentid(target_rowset, 1, 2));
+    CHECK_EQ(3, handler.get_next_segmentid(target_rowset, 3, 1));
+    CHECK_EQ(5, handler.get_next_segmentid(target_rowset, 0, 2));
+    CHECK_EQ(7, handler.get_next_segmentid(target_rowset, 2, 2));
+    CHECK_EQ(8, handler.get_next_segmentid(target_rowset, 3, 2));
+}
+
 } // namespace doris

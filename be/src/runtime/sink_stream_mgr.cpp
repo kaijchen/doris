@@ -40,6 +40,9 @@ bool TargetSegmentComparator::operator()(const TargetSegmentPtr& lhs,
     if (lhs->segmentid != rhs->segmentid) {
         return lhs->segmentid < rhs->segmentid;
     }
+    if (lhs->backendid != rhs->backendid) {
+        return lhs->backendid < rhs->backendid;
+    }
     return false;
 }
 
@@ -172,6 +175,7 @@ void SinkStreamHandler::_parse_header(butil::IOBuf* const message, PStreamHeader
               << ", schema_hash = " << hdr.tablet_schema_hash();
 }
 
+// TODO: delete this method
 uint64_t SinkStreamHandler::get_next_segmentid(TargetRowsetPtr target_rowset) {
     // TODO: need support concurrent flush memtable
     {
@@ -183,6 +187,33 @@ uint64_t SinkStreamHandler::get_next_segmentid(TargetRowsetPtr target_rowset) {
             return ++_tablet_segment_next_id[target_rowset];
         }
     }
+}
+
+uint64_t SinkStreamHandler::get_next_segmentid(TargetRowsetPtr target_rowset, int64_t segmentid,
+                                               int64_t backendid) {
+    // TODO: delete id;
+    std::lock_guard<std::mutex> l(_tablet_segment_next_id_lock);
+    TargetSegmentPtr target_segment = std::make_shared<TargetSegment>();
+    target_segment->target_rowset = target_rowset;
+    target_segment->segmentid = segmentid;
+    target_segment->backendid = backendid;
+
+    auto it = _tablet_segment_pos.find(target_segment);
+    if (it != _tablet_segment_pos.end()) {
+        return it->second;
+    }
+    for (int64_t i = 0; i <= segmentid; i++) {
+        TargetSegmentPtr front_target_segment = std::make_shared<TargetSegment>();
+        front_target_segment->target_rowset = target_rowset;
+        front_target_segment->segmentid = i;
+        front_target_segment->backendid = backendid;
+        auto it = _tablet_segment_pos.find(front_target_segment);
+        if (it == _tablet_segment_pos.end()) {
+            _tablet_segment_pos.emplace(front_target_segment, _current_id);
+            _current_id++;
+        }
+    }
+    return _tablet_segment_pos.find(target_segment)->second;
 }
 
 Status SinkStreamHandler::_build_rowset(TargetRowsetPtr target_rowset,

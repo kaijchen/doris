@@ -51,7 +51,7 @@ struct TargetRowsetComparator {
 struct TargetSegment {
     TargetRowsetPtr target_rowset;
     int64_t segmentid;
-    // std::string ip_port or BE id?
+    int64_t backendid;
 
     std::string to_string();
 };
@@ -79,6 +79,8 @@ private:
     void _report_status(StreamId stream, TargetRowsetPtr target_rowset, bool is_success,
                         std::string error_msg);
     uint64_t get_next_segmentid(TargetRowsetPtr target_rowset);
+    uint64_t get_next_segmentid(TargetRowsetPtr target_rowset, int64_t segmentid,
+                                int64_t backendid);
     Status _build_rowset(TargetRowsetPtr target_rowset, const RowsetMetaPB& rowset_meta);
 
 private:
@@ -90,6 +92,8 @@ private:
     // TODO: make it per load
     std::map<TargetRowsetPtr, size_t, TargetRowsetComparator> _tablet_segment_next_id;
     std::mutex _tablet_segment_next_id_lock;
+    std::map<TargetSegmentPtr, int64_t, TargetSegmentComparator> _tablet_segment_pos;
+    int64_t _current_id = 0;
     // TODO: make it per load
     std::map<TargetSegmentPtr, std::shared_ptr<ThreadPoolToken>, TargetSegmentComparator>
             _segment_token_map; // accessed in single thread, safe

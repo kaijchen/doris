@@ -55,7 +55,6 @@ namespace vectorized {
 class Block;
 } // namespace vectorized
 
-
 // Writer for a particular (load, index, tablet).
 // This class is NOT thread-safe, external synchronization is required.
 class DeltaWriterV2 {
@@ -130,7 +129,7 @@ public:
 
 private:
     DeltaWriterV2(WriteRequest* req, StorageEngine* storage_engine, RuntimeProfile* profile,
-                const UniqueId& load_id);
+                  const UniqueId& load_id);
 
     // push a full memtable to flush executor
     Status _flush_memtable_async();

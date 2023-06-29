@@ -88,7 +88,7 @@ class StreamSinkFileWriterTest : public testing::Test {
     };
 
 public:
-    StreamSinkFileWriterTest() {}
+    StreamSinkFileWriterTest() { srand(time(nullptr)); }
     ~StreamSinkFileWriterTest() {}
 
 protected:
@@ -102,7 +102,6 @@ protected:
         options.max_retry = FLAGS_max_retry;
         std::stringstream port;
         while (true) {
-            srand(time(nullptr));
             port << "0.0.0.0:" << (rand() % 1000 + 8000);
             if (channel.Init(port.str().c_str(), NULL) == 0) {
                 break;

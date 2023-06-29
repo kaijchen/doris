@@ -69,13 +69,13 @@ namespace doris {
 using namespace ErrorCode;
 
 Status DeltaWriterV2::open(WriteRequest* req, DeltaWriterV2** writer, RuntimeProfile* profile,
-                         const UniqueId& load_id) {
+                           const UniqueId& load_id) {
     *writer = new DeltaWriterV2(req, StorageEngine::instance(), profile, load_id);
     return Status::OK();
 }
 
-DeltaWriterV2::DeltaWriterV2(WriteRequest* req, StorageEngine* storage_engine, RuntimeProfile* profile,
-                         const UniqueId& load_id)
+DeltaWriterV2::DeltaWriterV2(WriteRequest* req, StorageEngine* storage_engine,
+                             RuntimeProfile* profile, const UniqueId& load_id)
         : _req(*req),
           _tablet(nullptr),
           _cur_rowset(nullptr),
@@ -232,7 +232,7 @@ Status DeltaWriterV2::append(const vectorized::Block* block) {
 }
 
 Status DeltaWriterV2::write(const vectorized::Block* block, const std::vector<int>& row_idxs,
-                          bool is_append) {
+                            bool is_append) {
     if (UNLIKELY(row_idxs.empty() && !is_append)) {
         return Status::OK();
     }
@@ -569,8 +569,8 @@ int64_t DeltaWriterV2::partition_id() const {
 }
 
 void DeltaWriterV2::_build_current_tablet_schema(int64_t index_id,
-                                               const OlapTableSchemaParam* table_schema_param,
-                                               const TabletSchema& ori_tablet_schema) {
+                                                 const OlapTableSchemaParam* table_schema_param,
+                                                 const TabletSchema& ori_tablet_schema) {
     _tablet_schema->copy_from(ori_tablet_schema);
     // find the right index id
     int i = 0;
