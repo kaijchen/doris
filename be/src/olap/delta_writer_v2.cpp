@@ -158,13 +158,6 @@ Status DeltaWriterV2::init() {
         return Status::Error<TABLE_NOT_FOUND>();
     }
 
-    // get rowset ids snapshot
-    if (_tablet->enable_unique_key_merge_on_write()) {
-        std::lock_guard<std::shared_mutex> lck(_tablet->get_header_lock());
-        _cur_max_version = _tablet->max_version_unlocked().second;
-        _rowset_ids = _tablet->all_rs_id(_cur_max_version);
-    }
-
     // check tablet version number
     if (!config::disable_auto_compaction &&
         _tablet->exceed_version_limit(config::max_tablet_version_num - 100) &&
@@ -189,9 +182,6 @@ Status DeltaWriterV2::init() {
         std::lock_guard<std::mutex> push_lock(_tablet->get_push_lock());
         RETURN_IF_ERROR(_storage_engine->txn_manager()->prepare_txn(_req.partition_id, _tablet,
                                                                     _req.txn_id, _req.load_id));
-    }
-    if (_tablet->enable_unique_key_merge_on_write() && _delete_bitmap == nullptr) {
-        _delete_bitmap.reset(new DeleteBitmap(_tablet->tablet_id()));
     }
     // build tablet schema in request level
     _build_current_tablet_schema(_req.index_id, _req.table_schema_param, *_tablet->tablet_schema());
@@ -451,25 +441,6 @@ Status DeltaWriterV2::close_wait() {
         RETURN_IF_ERROR(_notify_last_segment());
     }
 
-    if (_tablet->enable_unique_key_merge_on_write()) {
-        auto beta_rowset = reinterpret_cast<BetaRowset*>(_cur_rowset.get());
-        std::vector<segment_v2::SegmentSharedPtr> segments;
-        RETURN_IF_ERROR(beta_rowset->load_segments(&segments));
-        // tablet is under alter process. The delete bitmap will be calculated after conversion.
-        if (_tablet->tablet_state() == TABLET_NOTREADY &&
-            SchemaChangeHandler::tablet_in_converting(_tablet->tablet_id())) {
-            return Status::OK();
-        }
-        if (segments.size() > 1) {
-            // calculate delete bitmap between segments
-            RETURN_IF_ERROR(_tablet->calc_delete_bitmap_between_segments(_cur_rowset, segments,
-                                                                         _delete_bitmap));
-        }
-        RETURN_IF_ERROR(_tablet->commit_phase_update_delete_bitmap(
-                _cur_rowset, _rowset_ids, _delete_bitmap, segments, _req.txn_id,
-                _rowset_writer.get()));
-    }
-
     Status res;
     {
         SCOPED_TIMER(_commit_txn_timer);
@@ -481,11 +452,6 @@ Status DeltaWriterV2::close_wait() {
         LOG(WARNING) << "Failed to commit txn: " << _req.txn_id
                      << " for rowset: " << _cur_rowset->rowset_id();
         return res;
-    }
-    if (_tablet->enable_unique_key_merge_on_write()) {
-        _storage_engine->txn_manager()->set_txn_related_delete_bitmap(
-                _req.partition_id, _req.txn_id, _tablet->tablet_id(), _tablet->schema_hash(),
-                _tablet->tablet_uid(), true, _delete_bitmap, _rowset_ids);
     }
 
     _delta_written_success = true;
