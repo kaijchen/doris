@@ -60,49 +60,6 @@ struct TargetSegmentComparator {
     bool operator()(const TargetSegmentPtr& lhs, const TargetSegmentPtr& rhs) const;
 };
 
-class SinkStreamHandler : public StreamInputHandler {
-public:
-    SinkStreamHandler();
-    ~SinkStreamHandler();
-
-    int on_received_messages(StreamId id, butil::IOBuf* const messages[], size_t size) override;
-    void on_idle_timeout(StreamId id) override;
-    void on_closed(StreamId id) override;
-
-private:
-    void _handle_message(StreamId id, PStreamHeader hdr, TargetRowsetPtr rowset,
-                         TargetSegmentPtr segment, std::shared_ptr<butil::IOBuf> message);
-    void _parse_header(butil::IOBuf* const message, PStreamHeader& hdr);
-    Status _create_and_open_file(TargetSegmentPtr target_segment, std::string path);
-    Status _append_data(TargetSegmentPtr target_segment, std::shared_ptr<butil::IOBuf> message);
-    Status _close_file(TargetSegmentPtr target_segment);
-    void _report_status(StreamId stream, TargetRowsetPtr target_rowset, bool is_success,
-                        std::string error_msg);
-    uint64_t get_next_segmentid(TargetRowsetPtr target_rowset);
-    uint64_t get_next_segmentid(TargetRowsetPtr target_rowset, int64_t segmentid,
-                                int64_t backendid);
-    Status _build_rowset(TargetRowsetPtr target_rowset, const RowsetMetaPB& rowset_meta);
-
-private:
-    std::unique_ptr<ThreadPool> _workers;
-    // TODO: make it per load
-    std::map<TargetSegmentPtr, std::shared_ptr<io::LocalFileWriter>, TargetSegmentComparator>
-            _file_map;
-    std::mutex _file_map_lock;
-    // TODO: make it per load
-    std::map<TargetRowsetPtr, size_t, TargetRowsetComparator> _tablet_segment_next_id;
-    std::mutex _tablet_segment_next_id_lock;
-    std::map<TargetSegmentPtr, int64_t, TargetSegmentComparator> _tablet_segment_pos;
-    int64_t _current_id = 0;
-    // TODO: make it per load
-    std::map<TargetSegmentPtr, std::shared_ptr<ThreadPoolToken>, TargetSegmentComparator>
-            _segment_token_map; // accessed in single thread, safe
-    std::mutex _segment_token_map_lock;
-    std::map<TargetSegmentPtr, TargetSegmentPtr, TargetSegmentComparator>
-            _rawsegment_finalsegment_map;
-    std::mutex _rawsegment_finalsegment_map_lock;
-};
-
 // managing stream_id allocation and release
 class SinkStreamMgr {
 public:
@@ -111,12 +68,10 @@ public:
 
     StreamIdPtr get_free_stream_id();
     void release_stream_id(StreamIdPtr id);
-    SinkStreamHandler* get_sink_stream_handler() { return _handler.get(); };
 
 private:
     std::vector<StreamIdPtr> _free_stream_ids;
     std::mutex _lock;
-    std::shared_ptr<SinkStreamHandler> _handler;
 };
 
 } // namespace doris

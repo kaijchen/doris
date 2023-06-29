@@ -117,6 +117,7 @@
 #include "vec/exec/format/parquet/vparquet_reader.h"
 #include "vec/jsonb/serialize.h"
 #include "vec/runtime/vdata_stream_mgr.h"
+#include "runtime/load_stream_mgr.h"
 
 namespace google {
 namespace protobuf {
@@ -260,10 +261,14 @@ void PInternalServiceImpl::open_stream_sink(google::protobuf::RpcController* con
     brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
     brpc::StreamOptions stream_options;
     ExecEnv* env = ExecEnv::GetInstance();
-    SinkStreamMgr* sink_stream_mgr = env->get_sink_stream_mgr();
 
-    stream_options.handler = sink_stream_mgr->get_sink_stream_handler();
-    StreamIdPtr streamid = sink_stream_mgr->get_free_stream_id();
+    LoadStreamMgr* load_stream_mgr = env->load_stream_mgr();
+    LoadStreamSharedPtr load_stream = load_stream_mgr->find_or_create_load(request->id());
+
+    stream_options.handler = load_stream.get();
+
+    StreamIdPtr streamid = env->get_sink_stream_mgr()->get_free_stream_id();
+    load_stream_mgr->bind_stream_to_load(load_stream, streamid);
     LOG(INFO) << "OOXXOO: get streamid =" << streamid;
 
     if (brpc::StreamAccept(streamid.get(), *cntl, &stream_options) != 0) {
