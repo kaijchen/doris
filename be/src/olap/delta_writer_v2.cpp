@@ -198,11 +198,11 @@ Status DeltaWriterV2::init() {
     context.write_type = DataWriteType::TYPE_DIRECT;
     context.mow_context = std::make_shared<MowContext>(_cur_max_version, _req.txn_id, _rowset_ids,
                                                        _delete_bitmap);
+    context.tablet_id = _req.tablet_id;
+    context.partition_id = _req.partition_id;
+    context.tablet_schema_hash = _req.schema_hash;
     context.rowset_id = StorageEngine::instance()->next_rowset_id();
     context.tablet_uid = _tablet->tablet_uid();
-    context.tablet_id = _tablet->tablet_id();
-    context.partition_id = _tablet->partition_id();
-    context.tablet_schema_hash = _tablet->schema_hash();
     context.rowset_type = _tablet->tablet_meta()->preferred_rowset_type();
     if (context.rowset_type == ALPHA_ROWSET) {
         context.rowset_type = StorageEngine::instance()->default_rowset_type();
