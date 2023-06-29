@@ -37,7 +37,6 @@
 #include "io/fs/file_reader_options.h"
 #include "io/fs/file_system.h"
 #include "io/fs/file_writer.h"
-#include "io/fs/stream_sink_file_writer.h"
 #include "olap/data_dir.h"
 #include "olap/olap_define.h"
 #include "olap/rowset/beta_rowset.h"
@@ -108,7 +107,6 @@ Status BetaRowsetWriter::init(const RowsetWriterContext& rowset_writer_context) 
     _rowset_meta.reset(new RowsetMeta);
     _rowset_meta->set_fs(_context.fs);
     _rowset_meta->set_rowset_id(_context.rowset_id);
-    _index_id = _context.index_id;
     _rowset_meta->set_partition_id(_context.partition_id);
     _rowset_meta->set_tablet_id(_context.tablet_id);
     _rowset_meta->set_tablet_schema_hash(_context.tablet_schema_hash);
@@ -722,21 +720,7 @@ Status BetaRowsetWriter::_do_create_segment_writer(
         return Status::Error<INIT_FAILED>();
     }
     io::FileWriterPtr file_writer;
-    Status st;
-    if (config::experimental_olap_table_sink_v2) {
-        auto index_id = _index_id;
-        auto tablet_id = _rowset_meta->tablet_id();
-        auto load_id = _rowset_meta->load_id();
-        auto rowset_id = _rowset_meta->rowset_id();
-        auto stream_id = *_streams.begin();
-        auto schema_hash = _context.tablet_schema_hash;
-
-        auto stream_writer = std::make_unique<io::StreamSinkFileWriter>(stream_id);
-        stream_writer->init(load_id, index_id, tablet_id, rowset_id, segment_id, schema_hash);
-        file_writer = std::move(stream_writer);
-    } else {
-        st = fs->create_file(path, &file_writer);
-    }
+    Status st = fs->create_file(path, &file_writer);
     if (!st.ok()) {
         LOG(WARNING) << "failed to create writable file. path=" << path << ", err: " << st;
         return st;

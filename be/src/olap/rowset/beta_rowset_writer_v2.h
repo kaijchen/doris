@@ -41,7 +41,6 @@
 #include "olap/rowset/rowset_meta.h"
 #include "olap/rowset/rowset_writer.h"
 #include "olap/rowset/rowset_writer_context.h"
-#include "segcompaction.h"
 #include "segment_v2/segment.h"
 #include "util/spinlock.h"
 
@@ -54,19 +53,15 @@ namespace segment_v2 {
 class SegmentWriter;
 } // namespace segment_v2
 
-using SegCompactionCandidates = std::vector<segment_v2::SegmentSharedPtr>;
-using SegCompactionCandidatesSharedPtr = std::shared_ptr<SegCompactionCandidates>;
 namespace vectorized::schema_util {
 class LocalSchemaChangeRecorder;
 }
 
-class BetaRowsetWriter : public RowsetWriter {
-    friend class SegcompactionWorker;
-
+class BetaRowsetWriterV2 : public RowsetWriter {
 public:
-    BetaRowsetWriter();
+    BetaRowsetWriterV2(const std::vector<brpc::StreamId>& streams);
 
-    ~BetaRowsetWriter() override;
+    ~BetaRowsetWriterV2() override;
 
     Status init(const RowsetWriterContext& rowset_writer_context) override;
 
@@ -113,15 +108,9 @@ public:
         return _context.schema_change_recorder.get();
     }
 
-    SegcompactionWorker& get_segcompaction_worker() { return _segcompaction_worker; }
+    bool is_doing_segcompaction() const override { return false; }
 
-    Status flush_segment_writer_for_segcompaction(
-            std::unique_ptr<segment_v2::SegmentWriter>* writer, uint64_t index_size,
-            KeyBoundsPB& key_bounds);
-
-    bool is_doing_segcompaction() const override { return _is_doing_segcompaction; }
-
-    Status wait_flying_segcompaction() override;
+    Status wait_flying_segcompaction() override { return Status::OK(); }
 
 private:
     Status _do_add_block(const vectorized::Block* block,
@@ -132,22 +121,12 @@ private:
                       const FlushContext* flush_ctx = nullptr);
 
     Status _do_create_segment_writer(std::unique_ptr<segment_v2::SegmentWriter>* writer,
-                                     bool is_segcompaction, int64_t begin, int64_t end,
-                                     const FlushContext* ctx = nullptr);
+                                     int64_t begin, int64_t end, const FlushContext* ctx = nullptr);
     Status _create_segment_writer(std::unique_ptr<segment_v2::SegmentWriter>* writer,
                                   const FlushContext* ctx = nullptr);
     Status _flush_segment_writer(std::unique_ptr<segment_v2::SegmentWriter>* writer,
                                  int64_t* flush_size = nullptr);
     void _build_rowset_meta(std::shared_ptr<RowsetMeta> rowset_meta);
-    Status _segcompaction_if_necessary();
-    Status _segcompaction_ramaining_if_necessary();
-    Status _load_noncompacted_segments(std::vector<segment_v2::SegmentSharedPtr>* segments,
-                                       size_t num);
-    Status _find_longest_consecutive_small_segment(SegCompactionCandidatesSharedPtr segments);
-    Status _get_segcompaction_candidates(SegCompactionCandidatesSharedPtr& segments, bool is_last);
-    bool _is_segcompacted() { return (_num_segcompacted > 0) ? true : false; }
-
-    bool _check_and_set_is_doing_segcompaction();
 
     void _build_rowset_meta_with_spec_field(RowsetMetaSharedPtr rowset_meta,
                                             const RowsetMetaSharedPtr& spec_rowset_meta);
@@ -169,9 +148,6 @@ protected:
     roaring::Roaring _segment_set;         // bitmap set to record flushed segment id
     std::mutex _segment_set_mutex;         // mutex for _segment_set
     int32_t _segment_start_id; //basic write start from 0, partial update may be different
-    std::atomic<int32_t> _segcompacted_point; // segemnts before this point have
-                                              // already been segment compacted
-    std::atomic<int32_t> _num_segcompacted;   // index for segment compaction
     /// When flushing the memtable in the load process, we do not use this writer but an independent writer.
     /// Because we want to flush memtables in parallel.
     /// In other processes, such as merger or schema change, we will use this unified writer for data writing.
@@ -206,19 +182,11 @@ protected:
     bool _is_pending = false;
     bool _already_built = false;
 
-    SegcompactionWorker _segcompaction_worker;
-
-    // ensure only one inflight segcompaction task for each rowset
-    std::atomic<bool> _is_doing_segcompaction;
-    // enforce compare-and-swap on _is_doing_segcompaction
-    std::mutex _is_doing_segcompaction_lock;
-    std::condition_variable _segcompacting_cond;
-
-    std::atomic<int> _segcompaction_status;
-
     fmt::memory_buffer vlog_buffer;
 
-    std::shared_ptr<MowContext> _mow_context;
+    std::vector<brpc::StreamId> _streams;
+
+    int64_t _index_id;
 };
 
 } // namespace doris

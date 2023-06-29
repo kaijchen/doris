@@ -113,8 +113,6 @@ public:
     virtual vectorized::schema_util::LocalSchemaChangeRecorder*
     mutable_schema_change_recorder() = 0;
 
-    virtual void add_streams(std::vector<brpc::StreamId>& streams) {}
-
 private:
     DISALLOW_COPY_AND_ASSIGN(RowsetWriter);
 };

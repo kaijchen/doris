@@ -43,7 +43,7 @@
 #include "olap/memtable_flush_executor.h"
 #include "olap/olap_define.h"
 #include "olap/rowset/beta_rowset.h"
-#include "olap/rowset/beta_rowset_writer.h"
+#include "olap/rowset/beta_rowset_writer_v2.h"
 #include "olap/rowset/rowset_meta.h"
 #include "olap/rowset/rowset_writer.h"
 #include "olap/rowset/rowset_writer_context.h"
@@ -194,13 +194,29 @@ Status DeltaWriterV2::init() {
     context.segments_overlap = OVERLAPPING;
     context.tablet_schema = _tablet_schema;
     context.newest_write_timestamp = UnixSeconds();
-    context.tablet_id = _tablet->table_id();
     context.tablet = _tablet;
     context.write_type = DataWriteType::TYPE_DIRECT;
     context.mow_context = std::make_shared<MowContext>(_cur_max_version, _req.txn_id, _rowset_ids,
                                                        _delete_bitmap);
-    RETURN_IF_ERROR(_tablet->create_rowset_writer(context, &_rowset_writer));
-    _rowset_writer->add_streams(_streams);
+    context.rowset_id = StorageEngine::instance()->next_rowset_id();
+    context.tablet_uid = _tablet->tablet_uid();
+    context.tablet_id = _tablet->tablet_id();
+    context.partition_id = _tablet->partition_id();
+    context.tablet_schema_hash = _tablet->schema_hash();
+    context.rowset_type = _tablet->tablet_meta()->preferred_rowset_type();
+    if (context.rowset_type == ALPHA_ROWSET) {
+        context.rowset_type = StorageEngine::instance()->default_rowset_type();
+    }
+    if (context.fs != nullptr && context.fs->type() != io::FileSystemType::LOCAL) {
+        context.rowset_dir = remote_tablet_path(tablet_id());
+    } else {
+        context.rowset_dir = _tablet->tablet_path();
+    }
+    context.data_dir = _tablet->data_dir();
+    context.enable_unique_key_merge_on_write = _tablet->enable_unique_key_merge_on_write();
+
+    _rowset_writer = std::make_unique<BetaRowsetWriterV2>(_streams);
+    _rowset_writer->init(context);
 
     _schema.reset(new Schema(_tablet_schema));
     _reset_mem_table();

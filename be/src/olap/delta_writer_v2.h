@@ -49,7 +49,7 @@ class StorageEngine;
 class TupleDescriptor;
 class SlotDescriptor;
 class OlapTableSchemaParam;
-class RowsetWriter;
+class BetaRowsetWriterV2;
 
 namespace vectorized {
 class Block;
@@ -153,7 +153,7 @@ private:
     WriteRequest _req;
     TabletSharedPtr _tablet;
     RowsetSharedPtr _cur_rowset;
-    std::unique_ptr<RowsetWriter> _rowset_writer;
+    std::unique_ptr<BetaRowsetWriterV2> _rowset_writer;
     // TODO: Recheck the lifetime of _mem_table, Look should use unique_ptr
     std::unique_ptr<MemTable> _mem_table;
     std::unique_ptr<Schema> _schema;
