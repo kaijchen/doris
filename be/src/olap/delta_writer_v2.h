@@ -75,6 +75,7 @@ public:
         bool is_high_priority = false;
         OlapTableSchemaParam* table_schema_param;
         int64_t index_id = 0;
+        TabletSchemaSPtr tablet_schema;
     };
 
     static Status open(WriteRequest* req, DeltaWriterV2** writer, RuntimeProfile* profile,
@@ -156,7 +157,6 @@ private:
     std::unique_ptr<BetaRowsetWriterV2> _rowset_writer;
     // TODO: Recheck the lifetime of _mem_table, Look should use unique_ptr
     std::unique_ptr<MemTable> _mem_table;
-    //const TabletSchema* _tablet_schema;
     // tablet schema owned by delta writer, all write will use this tablet schema
     // it's build from tablet_schema（stored when create tablet） and OlapTableSchema
     // every request will have it's own tablet schema so simple schema change can work

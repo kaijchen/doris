@@ -516,6 +516,7 @@ void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
             wrequest.tuple_desc = sink->_output_tuple_desc;
             wrequest.is_high_priority = sink->_is_high_priority;
             wrequest.table_schema_param = sink->_schema.get();
+            wrequest.tablet_schema = sink->_tablet_schema;
             for (auto& index : sink->_schema->indexes()) {
                 if (index->index_id == ctx->index_id) {
                     wrequest.slots = &index->slots;
