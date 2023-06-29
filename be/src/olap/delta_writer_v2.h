@@ -116,9 +116,9 @@ public:
     // Wait all memtable in flush queue to be flushed
     Status wait_flush();
 
-    int64_t tablet_id() { return _tablet->tablet_id(); }
+    int64_t tablet_id() { return _req.tablet_id; }
 
-    int32_t schema_hash() { return _tablet->schema_hash(); }
+    int32_t schema_hash() { return _req.schema_hash; }
 
     int64_t total_received_rows() const { return _total_received_rows; }
 

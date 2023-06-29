@@ -428,7 +428,7 @@ Status DeltaWriterV2::close_wait() {
         st = _flush_token->wait();
     }
     if (UNLIKELY(!st.ok())) {
-        LOG(WARNING) << "previous flush failed tablet " << _tablet->tablet_id();
+        LOG(WARNING) << "previous flush failed tablet " << tablet_id();
         return st;
     }
 
@@ -472,7 +472,7 @@ Status DeltaWriterV2::close_wait() {
     // const FlushStatistic& stat = _flush_token->get_stats();
     // print slow log if wait more than 1s
     /*if (_wait_flush_timer->elapsed_time() > 1000UL * 1000 * 1000) {
-        LOG(INFO) << "close delta writer for tablet: " << _tablet->tablet_id()
+        LOG(INFO) << "close delta writer for tablet: " << tablet_id()
                   << ", load id: " << print_id(_req.load_id) << ", wait close for "
                   << _wait_flush_timer->elapsed_time() << "(ns), stats: " << stat;
     }*/
