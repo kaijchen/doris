@@ -182,12 +182,12 @@ Status DeltaWriterV2::init() {
     context.tablet_id = _req.tablet_id;
     context.partition_id = _req.partition_id;
     context.tablet_schema_hash = _req.schema_hash;
+    context.enable_unique_key_merge_on_write = _req.enable_unique_key_merge_on_write;
     context.rowset_type = RowsetTypePB::BETA_ROWSET;
     context.rowset_id = StorageEngine::instance()->next_rowset_id();
     context.data_dir = nullptr;
     context.tablet_uid = _tablet->tablet_uid();
     context.rowset_dir = _tablet->tablet_path();
-    context.enable_unique_key_merge_on_write = _tablet->enable_unique_key_merge_on_write();
 
     _rowset_writer = std::make_unique<BetaRowsetWriterV2>(_streams);
     _rowset_writer->init(context);
@@ -333,7 +333,7 @@ void DeltaWriterV2::_reset_mem_table() {
         _mem_table_flush_trackers.push_back(mem_table_flush_tracker);
     }
     _mem_table.reset(new MemTable(_req.tablet_id, _tablet_schema.get(), _req.slots, _req.tuple_desc,
-                                  _rowset_writer.get(), _tablet->enable_unique_key_merge_on_write(),
+                                  _rowset_writer.get(), _req.enable_unique_key_merge_on_write,
                                   mem_table_insert_tracker, mem_table_flush_tracker));
 
     COUNTER_UPDATE(_segment_num, 1);

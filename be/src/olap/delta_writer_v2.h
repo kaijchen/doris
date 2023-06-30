@@ -76,6 +76,7 @@ public:
         OlapTableSchemaParam* table_schema_param;
         int64_t index_id = 0;
         TabletSchemaSPtr tablet_schema;
+        bool enable_unique_key_merge_on_write = false;
     };
 
     static Status open(WriteRequest* req, DeltaWriterV2** writer, RuntimeProfile* profile,
