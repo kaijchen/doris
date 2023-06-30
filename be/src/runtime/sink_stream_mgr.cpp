@@ -46,6 +46,20 @@ bool TargetSegmentComparator::operator()(const TargetSegmentPtr& lhs,
     return false;
 }
 
+bool TargetCurrentSegmentComparator::operator()(const TargetCurrentSegmentPtr& lhs,
+                                                const TargetCurrentSegmentPtr& rhs) const {
+    TargetRowsetComparator rowset_cmp;
+    auto less = rowset_cmp.operator()(lhs->target_rowset, rhs->target_rowset);
+    auto greater = rowset_cmp.operator()(rhs->target_rowset, lhs->target_rowset);
+    if (less || greater) {
+        return less;
+    }
+    if (lhs->backendid != rhs->backendid) {
+        return lhs->backendid < rhs->backendid;
+    }
+    return false;
+}
+
 bool TargetRowsetComparator::operator()(const TargetRowsetPtr& lhs,
                                         const TargetRowsetPtr& rhs) const {
     if (lhs->streamid != rhs->streamid) {
@@ -175,45 +189,42 @@ void SinkStreamHandler::_parse_header(butil::IOBuf* const message, PStreamHeader
               << ", schema_hash = " << hdr.tablet_schema_hash();
 }
 
-// TODO: delete this method
-uint64_t SinkStreamHandler::get_next_segmentid(TargetRowsetPtr target_rowset) {
-    // TODO: need support concurrent flush memtable
-    {
-        std::lock_guard<std::mutex> l(_tablet_segment_next_id_lock);
-        if (_tablet_segment_next_id.find(target_rowset) == _tablet_segment_next_id.end()) {
-            _tablet_segment_next_id[target_rowset] = 0;
-            return 0;
-        } else {
-            return ++_tablet_segment_next_id[target_rowset];
-        }
-    }
-}
-
+// when call this method you should use lock
 uint64_t SinkStreamHandler::get_next_segmentid(TargetRowsetPtr target_rowset, int64_t segmentid,
                                                int64_t backendid) {
-    // TODO: delete id;
-    std::lock_guard<std::mutex> l(_tablet_segment_next_id_lock);
     TargetSegmentPtr target_segment = std::make_shared<TargetSegment>();
     target_segment->target_rowset = target_rowset;
     target_segment->segmentid = segmentid;
     target_segment->backendid = backendid;
 
+    int64_t id = 0;
     auto it = _tablet_segment_pos.find(target_segment);
     if (it != _tablet_segment_pos.end()) {
-        return it->second;
+        id = it->second;
+        _tablet_segment_pos.erase(target_segment);
+        return id;
     }
-    for (int64_t i = 0; i <= segmentid; i++) {
+
+    TargetCurrentSegmentPtr current_segment = std::make_shared<TargetCurrentSegment>();
+    current_segment->target_rowset = target_rowset;
+    current_segment->backendid = backendid;
+    auto last_id_it = _tablet_segment_last_id.find(current_segment);
+    int64_t begin_pre_allocate_id = 0;
+    if (last_id_it != _tablet_segment_last_id.end()) {
+        begin_pre_allocate_id = last_id_it->second + 1;
+    }
+
+    for (int64_t i = begin_pre_allocate_id; i < segmentid; i++) {
         TargetSegmentPtr front_target_segment = std::make_shared<TargetSegment>();
         front_target_segment->target_rowset = target_rowset;
         front_target_segment->segmentid = i;
         front_target_segment->backendid = backendid;
-        auto it = _tablet_segment_pos.find(front_target_segment);
-        if (it == _tablet_segment_pos.end()) {
-            _tablet_segment_pos.emplace(front_target_segment, _current_id);
-            _current_id++;
-        }
+        _tablet_segment_pos.emplace(front_target_segment, _current_id++);
     }
-    return _tablet_segment_pos.find(target_segment)->second;
+    id = _current_id++;
+    _tablet_segment_last_id.insert_or_assign(current_segment, segmentid);
+
+    return id;
 }
 
 Status SinkStreamHandler::_build_rowset(TargetRowsetPtr target_rowset,
@@ -338,7 +349,10 @@ int SinkStreamHandler::on_received_messages(StreamId id, butil::IOBuf* const mes
                    _rawsegment_finalsegment_map.end());
             TargetSegmentPtr _final_target_segment = std::make_shared<TargetSegment>();
             _final_target_segment->target_rowset = target_rowset;
-            uint64_t final_segmentid = get_next_segmentid(target_rowset);
+
+            auto backend_id = ExecEnv::GetInstance()->get_sink_stream_mgr()->find_backend_id(id);
+            uint64_t final_segmentid = get_next_segmentid(target_rowset, target_segment->segmentid, backend_id);
+
             _final_target_segment->segmentid = final_segmentid;
             _rawsegment_finalsegment_map[_raw_target_segment] = _final_target_segment;
         }

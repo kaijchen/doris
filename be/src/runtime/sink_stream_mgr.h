@@ -60,6 +60,16 @@ struct TargetSegmentComparator {
     bool operator()(const TargetSegmentPtr& lhs, const TargetSegmentPtr& rhs) const;
 };
 
+// use for next segment id
+struct TargetCurrentSegment {
+    TargetRowsetPtr target_rowset;
+    int64_t backendid;
+};
+using TargetCurrentSegmentPtr = std::shared_ptr<TargetCurrentSegment>;
+struct TargetCurrentSegmentComparator {
+    bool operator()(const TargetCurrentSegmentPtr& lhs, const TargetCurrentSegmentPtr& rhs) const;
+};
+
 class SinkStreamHandler : public StreamInputHandler {
 public:
     SinkStreamHandler();
@@ -78,7 +88,6 @@ private:
     Status _close_file(TargetSegmentPtr target_segment);
     void _report_status(StreamId stream, TargetRowsetPtr target_rowset, bool is_success,
                         std::string error_msg);
-    uint64_t get_next_segmentid(TargetRowsetPtr target_rowset);
     uint64_t get_next_segmentid(TargetRowsetPtr target_rowset, int64_t segmentid,
                                 int64_t backendid);
     Status _build_rowset(TargetRowsetPtr target_rowset, const RowsetMetaPB& rowset_meta);
@@ -90,10 +99,11 @@ private:
             _file_map;
     std::mutex _file_map_lock;
     // TODO: make it per load
-    std::map<TargetRowsetPtr, size_t, TargetRowsetComparator> _tablet_segment_next_id;
-    std::mutex _tablet_segment_next_id_lock;
     std::map<TargetSegmentPtr, int64_t, TargetSegmentComparator> _tablet_segment_pos;
+    std::map<TargetCurrentSegmentPtr, int64_t, TargetCurrentSegmentComparator>
+            _tablet_segment_last_id;
     int64_t _current_id = 0;
+
     // TODO: make it per load
     std::map<TargetSegmentPtr, std::shared_ptr<ThreadPoolToken>, TargetSegmentComparator>
             _segment_token_map; // accessed in single thread, safe
@@ -112,11 +122,23 @@ public:
     StreamIdPtr get_free_stream_id();
     void release_stream_id(StreamIdPtr id);
     SinkStreamHandler* get_sink_stream_handler() { return _handler.get(); };
+    void set_stream_to_backend(StreamIdPtr streamid, int64_t backendid) {
+        _stream_to_backend.emplace(streamid, backendid);
+    }
+    int64_t find_backend_id(StreamId id) {
+        auto it = _stream_to_backend.find(std::make_shared<StreamId>(id));
+        if (it != _stream_to_backend.end()) {
+            return it->second;
+        } else {
+            return -1;
+        }
+    }
 
 private:
     std::vector<StreamIdPtr> _free_stream_ids;
     std::mutex _lock;
     std::shared_ptr<SinkStreamHandler> _handler;
+    std::map<StreamIdPtr, int64_t> _stream_to_backend;
 };
 
 } // namespace doris

@@ -6,6 +6,7 @@
 #include "olap/delta_writer.h"
 #include "runtime/memory/mem_tracker_limiter.h"
 #include "util/countdown_latch.h"
+#include "olap/delta_writer_v2.h"
 
 namespace doris {
 class VOlapTableSinkV2Mgr {
@@ -19,9 +20,9 @@ public:
     // If yes, it will flush memtable to try to reduce memory consumption.
     void handle_memtable_flush();
 
-    void register_writer(std::shared_ptr<DeltaWriter> writer);
+    void register_writer(std::shared_ptr<DeltaWriterV2> writer);
 
-    void deregister_writer(std::shared_ptr<DeltaWriter> writer);
+    void deregister_writer(std::shared_ptr<DeltaWriterV2> writer);
 
 private:
     void _refresh_mem_tracker();
@@ -37,6 +38,6 @@ private:
     int64_t _load_soft_mem_limit = -1;
     bool _soft_reduce_mem_in_progress = false;
 
-    std::unordered_set<std::shared_ptr<DeltaWriter>> _writers;
+    std::unordered_set<std::shared_ptr<DeltaWriterV2>> _writers;
 };
 } // namespace doris

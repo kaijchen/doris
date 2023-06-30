@@ -288,9 +288,8 @@ static TDescriptorTable create_descriptor_tablet() {
 
 class VOlapTabletSinkV2MgrTest : public testing::Test {
 public:
-    ~VOlapTabletSinkV2MgrTest() {
-        delete _mgr;
-    }
+    ~VOlapTabletSinkV2MgrTest() { delete _mgr; }
+
 protected:
     virtual void SetUp() {
         // set path
@@ -347,12 +346,16 @@ TEST_F(VOlapTabletSinkV2MgrTest, handle_memtable_flush_test) {
     PUniqueId load_id;
     load_id.set_hi(0);
     load_id.set_lo(0);
-    WriteRequest write_req = {10000,   270068372,  WriteType::LOAD,        20002, 30002,
-                              load_id, tuple_desc, &(tuple_desc->slots()), false, &param};
-    DeltaWriter* delta_writer = nullptr;
+
+    TabletManager* tablet_mgr = _engine->tablet_manager();
+    auto tablet = tablet_mgr->get_tablet(request.tablet_id);
+    TabletSchemaSPtr tablet_schema = tablet->tablet_schema();
+    doris:: DeltaWriterV2::WriteRequest write_req = {10000,   270068372,  doris::DeltaWriterV2::WriteType::LOAD,        20002, 30002,
+                              load_id, tuple_desc, &(tuple_desc->slots()), false, &param, 0, tablet_schema, false};
+    DeltaWriterV2* delta_writer = nullptr;
     std::unique_ptr<RuntimeProfile> profile;
     profile = std::make_unique<RuntimeProfile>("VOlapTableSinkV2TestMgr");
-    DeltaWriter::open(&write_req, &delta_writer, profile.get(), TUniqueId());
+    DeltaWriterV2::open(&write_req, &delta_writer, profile.get(), TUniqueId());
     ASSERT_NE(delta_writer, nullptr);
 
     vectorized::Block block;
@@ -438,7 +441,7 @@ TEST_F(VOlapTabletSinkV2MgrTest, handle_memtable_flush_test) {
         res = delta_writer->write(&block, {0});
         ASSERT_TRUE(res.ok());
     }
-    std::shared_ptr<DeltaWriter> writer(delta_writer);
+    std::shared_ptr<DeltaWriterV2> writer(delta_writer);
 
     _mgr->init(100);
     _mgr->register_writer(writer);
@@ -448,7 +451,7 @@ TEST_F(VOlapTabletSinkV2MgrTest, handle_memtable_flush_test) {
 
     res = writer.get()->close();
     EXPECT_EQ(Status::OK(), res);
-    res = writer.get()->close_wait(PSlaveTabletNodes(), false);
+    res = writer.get()->close_wait();
     EXPECT_EQ(Status::OK(), res);
     res = _engine->tablet_manager()->drop_tablet(request.tablet_id, request.replica_id, false);
     EXPECT_EQ(Status::OK(), res);
