@@ -65,12 +65,18 @@ public:
 
     Status init(const RowsetWriterContext& rowset_writer_context) override;
 
-    Status add_block(const vectorized::Block* block) override;
+    Status add_block(const vectorized::Block* block) override {
+        return Status::Error<ErrorCode::NOT_IMPLEMENTED_ERROR>();
+    }
 
     // add rowset by create hard link
-    Status add_rowset(RowsetSharedPtr rowset) override;
+    Status add_rowset(RowsetSharedPtr rowset) override {
+        return Status::Error<ErrorCode::NOT_IMPLEMENTED_ERROR>();
+    }
 
-    Status add_rowset_for_linked_schema_change(RowsetSharedPtr rowset) override;
+    Status add_rowset_for_linked_schema_change(RowsetSharedPtr rowset) override {
+        return Status::Error<ErrorCode::NOT_IMPLEMENTED_ERROR>();
+    }
 
     Status flush() override;
 
@@ -81,7 +87,10 @@ public:
 
     RowsetSharedPtr build() override;
 
-    RowsetSharedPtr manual_build(const RowsetMetaSharedPtr& rowset_meta) override;
+    RowsetSharedPtr manual_build(const RowsetMetaSharedPtr& rowset_meta) override {
+        LOG(FATAL) << "not implemeted";
+        return nullptr;
+    }
 
     Version version() override { return _context.version; }
 
@@ -101,6 +110,7 @@ public:
 
     // Maybe modified by local schema change
     vectorized::schema_util::LocalSchemaChangeRecorder* mutable_schema_change_recorder() override {
+        LOG(FATAL) << "not implemeted";
         return nullptr;
     }
 
@@ -127,12 +137,6 @@ private:
     void _build_rowset_meta_with_spec_field(RowsetMetaSharedPtr rowset_meta,
                                             const RowsetMetaSharedPtr& spec_rowset_meta);
     bool _is_segment_overlapping(const std::vector<KeyBoundsPB>& segments_encoded_key_bounds);
-    void _clear_statistics_for_deleting_segments_unsafe(uint64_t begin, uint64_t end);
-    Status _rename_compacted_segments(int64_t begin, int64_t end);
-    Status _rename_compacted_segment_plain(uint64_t seg_id);
-    Status _rename_compacted_indices(int64_t begin, int64_t end, uint64_t seg_id);
-
-    void set_segment_start_id(int32_t start_id) override { _segment_start_id = start_id; }
 
 protected:
     RowsetWriterContext _context;
@@ -143,7 +147,6 @@ protected:
     std::atomic<int32_t> _num_segment;     // number of consecutive flushed segments
     roaring::Roaring _segment_set;         // bitmap set to record flushed segment id
     std::mutex _segment_set_mutex;         // mutex for _segment_set
-    int32_t _segment_start_id; //basic write start from 0, partial update may be different
     /// When flushing the memtable in the load process, we do not use this writer but an independent writer.
     /// Because we want to flush memtables in parallel.
     /// In other processes, such as merger or schema change, we will use this unified writer for data writing.
