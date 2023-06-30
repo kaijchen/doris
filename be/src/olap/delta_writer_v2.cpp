@@ -77,7 +77,6 @@ Status DeltaWriterV2::open(WriteRequest* req, DeltaWriterV2** writer, RuntimePro
 DeltaWriterV2::DeltaWriterV2(WriteRequest* req, StorageEngine* storage_engine,
                              RuntimeProfile* profile, const UniqueId& load_id)
         : _req(*req),
-          _tablet(nullptr),
           _cur_rowset(nullptr),
           _rowset_writer(nullptr),
           _tablet_schema(new TabletSchema),
@@ -107,9 +106,6 @@ void DeltaWriterV2::_init_profile(RuntimeProfile* profile) {
 }
 
 DeltaWriterV2::~DeltaWriterV2() {
-    if (_is_init && !_delta_written_success) {
-        _garbage_collection();
-    }
 
     if (!_is_init) {
         return;
@@ -118,54 +114,15 @@ DeltaWriterV2::~DeltaWriterV2() {
     if (_flush_token != nullptr) {
         // cancel and wait all memtables in flush queue to be finished
         _flush_token->cancel();
-
-        if (_tablet != nullptr) {
-            const FlushStatistic& stat = _flush_token->get_stats();
-            _tablet->flush_bytes->increment(stat.flush_size_bytes);
-            _tablet->flush_finish_count->increment(stat.flush_finish_count);
-        }
-    }
-
-    if (_tablet != nullptr) {
-        _tablet->data_dir()->remove_pending_ids(ROWSET_ID_PREFIX +
-                                                _rowset_writer->rowset_id().to_string());
     }
 
     _mem_table.reset();
 }
 
-void DeltaWriterV2::_garbage_collection() {
-    Status rollback_status = Status::OK();
-    TxnManager* txn_mgr = _storage_engine->txn_manager();
-    if (_tablet != nullptr) {
-        rollback_status = txn_mgr->rollback_txn(_req.partition_id, _tablet, _req.txn_id);
-    }
-    // has to check rollback status, because the rowset maybe committed in this thread and
-    // published in another thread, then rollback will failed.
-    // when rollback failed should not delete rowset
-    if (rollback_status.ok()) {
-        _storage_engine->add_unused_rowset(_cur_rowset);
-    }
-}
-
 Status DeltaWriterV2::init() {
     TabletManager* tablet_mgr = _storage_engine->tablet_manager();
-    _tablet = tablet_mgr->get_tablet(_req.tablet_id);
-    if (_tablet == nullptr) {
-        LOG(WARNING) << "fail to find tablet. tablet_id=" << _req.tablet_id
-                     << ", schema_hash=" << _req.schema_hash;
-        return Status::Error<TABLE_NOT_FOUND>();
-    }
-
-    {
-        std::shared_lock base_migration_rlock(_tablet->get_migration_lock(), std::try_to_lock);
-        if (!base_migration_rlock.owns_lock()) {
-            return Status::Error<TRY_LOCK_FAILED>();
-        }
-        std::lock_guard<std::mutex> push_lock(_tablet->get_push_lock());
-        RETURN_IF_ERROR(_storage_engine->txn_manager()->prepare_txn(_req.partition_id, _tablet,
-                                                                    _req.txn_id, _req.load_id));
-    }
+    // TODO: remove tablet
+    auto tablet = tablet_mgr->get_tablet(_req.tablet_id);
     // build tablet schema in request level
     _build_current_tablet_schema(_req.index_id, _req.table_schema_param, *_req.tablet_schema.get());
     RowsetWriterContext context;
@@ -186,8 +143,8 @@ Status DeltaWriterV2::init() {
     context.rowset_type = RowsetTypePB::BETA_ROWSET;
     context.rowset_id = StorageEngine::instance()->next_rowset_id();
     context.data_dir = nullptr;
-    context.tablet_uid = _tablet->tablet_uid();
-    context.rowset_dir = _tablet->tablet_path();
+    context.tablet_uid = tablet->tablet_uid();
+    context.rowset_dir = tablet->tablet_path();
 
     _rowset_writer = std::make_unique<BetaRowsetWriterV2>(_streams);
     _rowset_writer->init(context);
@@ -426,19 +383,6 @@ Status DeltaWriterV2::close_wait() {
 
     RETURN_IF_ERROR(_notify_last_segment());
 
-    Status res;
-    {
-        SCOPED_TIMER(_commit_txn_timer);
-        res = _storage_engine->txn_manager()->commit_txn(_req.partition_id, _tablet, _req.txn_id,
-                                                         _req.load_id, _cur_rowset, false);
-    }
-
-    if (!res && !res.is<PUSH_TRANSACTION_ALREADY_EXIST>()) {
-        LOG(WARNING) << "Failed to commit txn: " << _req.txn_id
-                     << " for rowset: " << _cur_rowset->rowset_id();
-        return res;
-    }
-
     _delta_written_success = true;
 
     // const FlushStatistic& stat = _flush_token->get_stats();
@@ -533,9 +477,6 @@ void DeltaWriterV2::_build_current_tablet_schema(int64_t index_id,
         indexes[i]->columns[0]->unique_id() >= 0) {
         _tablet_schema->build_current_tablet_schema(index_id, table_schema_param->version(),
                                                     indexes[i], ori_tablet_schema);
-    }
-    if (_tablet_schema->schema_version() > ori_tablet_schema.schema_version()) {
-        _tablet->update_max_version_schema(_tablet_schema);
     }
 
     _tablet_schema->set_table_id(table_schema_param->table_id());
