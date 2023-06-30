@@ -29,11 +29,11 @@
 
 namespace doris {
 
-LoadStreamSharedPtr LoadStreamMgr::find_or_create_load(PUniqueId loadid) {
+LoadStreamSharedPtr LoadStreamMgr::find_or_create_load(PUniqueId loadid, size_t num_senders) {
     std::string loadid_str = loadid.SerializeAsString();
     std::lock_guard<std::mutex> l(_load_streams_lock);
     if (_load_streams.find(loadid_str) == _load_streams.end()) {
-        _load_streams[loadid_str] = std::make_shared<LoadStream>();
+        _load_streams[loadid_str] = std::make_shared<LoadStream>(num_senders);
     }
     return _load_streams[loadid_str];
 }

@@ -29,6 +29,7 @@
 #include "common/compiler_util.h" // IWYU pragma: keep
 #include "common/status.h"
 #include <runtime/sink_stream_mgr.h>
+#include <runtime/stream_rowset_builder.h>
 
 namespace doris {
 
@@ -60,6 +61,17 @@ struct TargetSegmentComparator {
     bool operator()(const TargetSegmentPtr& lhs, const TargetSegmentPtr& rhs) const;
 };
 
+class IndexStream {
+public:
+    IndexStream(int64_t indexid): _indexid(indexid) {}
+
+private:
+    int64_t _indexid;
+    std::map<int64_t /*tabletid*/, StreamRowsetBuilder> _rowset_builder_map
+
+};
+using IndexStreamPtr = std::shared_ptr<IndexStream>;
+
 class LoadStream : public StreamInputHandler {
 public:
     LoadStream();
@@ -68,6 +80,8 @@ public:
     int on_received_messages(StreamId id, butil::IOBuf* const messages[], size_t size) override;
     void on_idle_timeout(StreamId id) override;
     void on_closed(StreamId id) override;
+    IndexStreamPtr find_or_create_index_stream(int64_t indexid);
+
 
 private:
     void _handle_message(StreamId id, PStreamHeader hdr, TargetRowsetPtr rowset,
@@ -98,6 +112,7 @@ private:
     std::map<TargetSegmentPtr, TargetSegmentPtr, TargetSegmentComparator>
             _rawsegment_finalsegment_map;
     std::mutex _rawsegment_finalsegment_map_lock;
+    std::map<int64_t /*indexid*/, IndexStreamPtr> _index_stream_map;
 };
 
 using LoadStreamSharedPtr = std::shared_ptr<LoadStream>;

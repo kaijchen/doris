@@ -263,7 +263,7 @@ void PInternalServiceImpl::open_stream_sink(google::protobuf::RpcController* con
     ExecEnv* env = ExecEnv::GetInstance();
 
     LoadStreamMgr* load_stream_mgr = env->load_stream_mgr();
-    LoadStreamSharedPtr load_stream = load_stream_mgr->find_or_create_load(request->id());
+    LoadStreamSharedPtr load_stream = load_stream_mgr->find_or_create_load(request->id(), request->num_senders());
 
     stream_options.handler = load_stream.get();
 

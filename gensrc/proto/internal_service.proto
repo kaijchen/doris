@@ -681,6 +681,8 @@ message PGetTabletVersionsResponse {
 // open stream sink
 message POpenStreamSinkRequest {
     optional PUniqueId id = 1;
+    optional int32 num_senders = 2;
+    optional int64 txnid = 3;
 };
 
 message POpenStreamSinkResponse {
