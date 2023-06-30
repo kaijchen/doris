@@ -32,34 +32,6 @@ namespace doris {
 using namespace brpc;
 using StreamIdPtr = std::shared_ptr<StreamId>;
 
-// locate a rowset
-struct TargetRowset {
-    brpc::StreamId streamid;
-    UniqueId loadid;
-    int64_t indexid;
-    int64_t tabletid;
-    RowsetId rowsetid; // TODO probably not needed
-
-    std::string to_string();
-};
-using TargetRowsetPtr = std::shared_ptr<TargetRowset>;
-struct TargetRowsetComparator {
-    bool operator()(const TargetRowsetPtr& lhs, const TargetRowsetPtr& rhs) const;
-};
-
-// locate a segment file
-struct TargetSegment {
-    TargetRowsetPtr target_rowset;
-    int64_t segmentid;
-    int64_t backendid;
-
-    std::string to_string();
-};
-using TargetSegmentPtr = std::shared_ptr<TargetSegment>;
-struct TargetSegmentComparator {
-    bool operator()(const TargetSegmentPtr& lhs, const TargetSegmentPtr& rhs) const;
-};
-
 // managing stream_id allocation and release
 class SinkStreamMgr {
 public:

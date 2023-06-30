@@ -28,57 +28,6 @@
 
 namespace doris {
 
-bool TargetSegmentComparator::operator()(const TargetSegmentPtr& lhs,
-                                         const TargetSegmentPtr& rhs) const {
-    TargetRowsetComparator rowset_cmp;
-    auto less = rowset_cmp.operator()(lhs->target_rowset, rhs->target_rowset);
-    auto greater = rowset_cmp.operator()(rhs->target_rowset, lhs->target_rowset);
-    // if rowset not equal
-    if (less || greater) {
-        return less;
-    }
-    if (lhs->segmentid != rhs->segmentid) {
-        return lhs->segmentid < rhs->segmentid;
-    }
-    if (lhs->backendid != rhs->backendid) {
-        return lhs->backendid < rhs->backendid;
-    }
-    return false;
-}
-
-bool TargetRowsetComparator::operator()(const TargetRowsetPtr& lhs,
-                                        const TargetRowsetPtr& rhs) const {
-    if (lhs->streamid != rhs->streamid) {
-        return lhs->streamid < rhs->streamid;
-    }
-    if (lhs->loadid.hi != rhs->loadid.hi) {
-        return lhs->loadid.hi < rhs->loadid.hi;
-    }
-    if (lhs->loadid.lo != rhs->loadid.lo) {
-        return lhs->loadid.lo < rhs->loadid.lo;
-    }
-    if (lhs->indexid != rhs->indexid) {
-        return lhs->indexid < rhs->indexid;
-    }
-    if (lhs->tabletid != rhs->tabletid) {
-        return lhs->tabletid < rhs->tabletid;
-    }
-    return false;
-}
-
-std::string TargetRowset::to_string() {
-    std::stringstream ss;
-    ss << "streamid: " << streamid << ", loadid: " << loadid << ", indexid: " << indexid
-       << ", tabletid: " << tabletid;
-    return ss.str();
-}
-
-std::string TargetSegment::to_string() {
-    std::stringstream ss;
-    ss << target_rowset->to_string() << ", segmentid: " << segmentid;
-    return ss.str();
-}
-
 SinkStreamMgr::SinkStreamMgr() {
     for (int i = 0; i < 1000; ++i) {
         StreamIdPtr stream_id = std::make_shared<StreamId>();
