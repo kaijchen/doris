@@ -179,23 +179,14 @@ Status DeltaWriterV2::init() {
     context.newest_write_timestamp = UnixSeconds();
     context.tablet = nullptr;
     context.write_type = DataWriteType::TYPE_DIRECT;
-    context.mow_context = std::make_shared<MowContext>(_cur_max_version, _req.txn_id, _rowset_ids,
-                                                       _delete_bitmap);
     context.tablet_id = _req.tablet_id;
     context.partition_id = _req.partition_id;
     context.tablet_schema_hash = _req.schema_hash;
+    context.rowset_type = RowsetTypePB::BETA_ROWSET;
     context.rowset_id = StorageEngine::instance()->next_rowset_id();
+    context.data_dir = nullptr;
     context.tablet_uid = _tablet->tablet_uid();
-    context.rowset_type = _tablet->tablet_meta()->preferred_rowset_type();
-    if (context.rowset_type == ALPHA_ROWSET) {
-        context.rowset_type = StorageEngine::instance()->default_rowset_type();
-    }
-    if (context.fs != nullptr && context.fs->type() != io::FileSystemType::LOCAL) {
-        context.rowset_dir = remote_tablet_path(tablet_id());
-    } else {
-        context.rowset_dir = _tablet->tablet_path();
-    }
-    context.data_dir = _tablet->data_dir();
+    context.rowset_dir = _tablet->tablet_path();
     context.enable_unique_key_merge_on_write = _tablet->enable_unique_key_merge_on_write();
 
     _rowset_writer = std::make_unique<BetaRowsetWriterV2>(_streams);
@@ -341,8 +332,6 @@ void DeltaWriterV2::_reset_mem_table() {
         _mem_table_insert_trackers.push_back(mem_table_insert_tracker);
         _mem_table_flush_trackers.push_back(mem_table_flush_tracker);
     }
-    auto mow_context = std::make_shared<MowContext>(_cur_max_version, _req.txn_id, _rowset_ids,
-                                                    _delete_bitmap);
     _mem_table.reset(new MemTable(_req.tablet_id, _tablet_schema.get(), _req.slots, _req.tuple_desc,
                                   _rowset_writer.get(), _tablet->enable_unique_key_merge_on_write(),
                                   mem_table_insert_tracker, mem_table_flush_tracker));

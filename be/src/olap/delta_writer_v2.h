@@ -173,12 +173,6 @@ private:
 
     std::mutex _lock;
 
-    DeleteBitmapPtr _delete_bitmap = nullptr;
-    // current rowset_ids, used to do diff in publish_version
-    RowsetIdUnorderedSet _rowset_ids;
-    // current max version, used to calculate delete bitmap
-    int64_t _cur_max_version;
-
     // total rows num written by DeltaWriterV2
     int64_t _total_received_rows = 0;
 
