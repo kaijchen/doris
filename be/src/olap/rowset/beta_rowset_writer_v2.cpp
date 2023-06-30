@@ -74,27 +74,14 @@ BetaRowsetWriterV2::~BetaRowsetWriterV2() {
     // TODO(lingbin): Should wrapper exception logic, no need to know file ops directly.
     if (!_already_built) {       // abnormal exit, remove all files generated
         _segment_writer.reset(); // ensure all files are closed
-        auto fs = _rowset_meta->fs();
-        if (!fs) {
-            return;
-        }
-        auto max_segment_id = std::max(_num_segment.load(), _next_segment_id.load());
-        for (int i = 0; i < max_segment_id; ++i) {
-            std::string seg_path = BetaRowset::segment_file_path(
-                    _context.rowset_dir, _context.rowset_id, _segment_start_id + i);
-            // Even if an error is encountered, these files that have not been cleaned up
-            // will be cleaned up by the GC background. So here we only print the error
-            // message when we encounter an error.
-            WARN_IF_ERROR(fs->delete_file(seg_path),
-                          strings::Substitute("Failed to delete file=$0", seg_path));
-        }
+
+        // TODO: send signal to remote to cleanup segments
     }
 }
 
 Status BetaRowsetWriterV2::init(const RowsetWriterContext& rowset_writer_context) {
     _context = rowset_writer_context;
     _rowset_meta.reset(new RowsetMeta);
-    _rowset_meta->set_fs(_context.fs);
     _rowset_meta->set_rowset_id(_context.rowset_id);
     _index_id = _context.index_id;
     _rowset_meta->set_partition_id(_context.partition_id);
@@ -366,10 +353,6 @@ Status BetaRowsetWriterV2::_do_create_segment_writer(
                                    : allocate_segment_id();
     segment_id = segid_offset + _segment_start_id;
     path = BetaRowset::segment_file_path(_context.rowset_dir, _context.rowset_id, segment_id);
-    auto fs = _rowset_meta->fs();
-    if (!fs) {
-        return Status::Error<INIT_FAILED>();
-    }
     io::FileWriterPtr file_writer;
     auto index_id = _index_id;
     auto tablet_id = _rowset_meta->tablet_id();
