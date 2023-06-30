@@ -682,6 +682,7 @@ message PGetTabletVersionsResponse {
 message POpenStreamSinkRequest {
     optional PUniqueId id = 1;
     optional int64 tablet_id = 2;
+    optional int64 backend_id = 3;
 };
 
 message POpenStreamSinkResponse {
