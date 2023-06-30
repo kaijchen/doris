@@ -260,6 +260,8 @@ Status LoadStream::_build_rowset(TargetRowsetPtr target_rowset,
 void LoadStream::_handle_message(StreamId stream, PStreamHeader hdr,
                                  TargetRowsetPtr target_rowset,
                                  TargetSegmentPtr target_segment,
+                                 index_stream,
+                                 rowset_builder,
                                  std::shared_ptr<butil::IOBuf> message) {
     Status s = Status::OK();
     std::string path;
@@ -267,33 +269,27 @@ void LoadStream::_handle_message(StreamId stream, PStreamHeader hdr,
 
     switch (hdr.opcode()) {
     case PStreamHeader::OPEN_FILE:
-#ifndef BE_TEST
-        DCHECK(hdr.has_tablet_id() && hdr.has_tablet_schema_hash() && hdr.has_rowset_id());
-        tablet = StorageEngine::instance()->tablet_manager()->get_tablet(hdr.tablet_id(),
-                                                                         hdr.tablet_schema_hash());
-        path = fmt::format("{}/{}_{}.dat", tablet->tablet_path(), hdr.rowset_id(),
-                           target_segment->segmentid);
-#else
-        // in UT, we encode path directly behind header
-        (void)tablet;
-        path = message->to_string();
-#endif
-        s = _create_and_open_file(target_segment, path);
+        s = rowset_builder->create_and_open_file(target_segment, path);
         break;
     case PStreamHeader::APPEND_DATA:
-        s = _append_data(target_segment, message);
+        s = rowset_builder->append_data(target_segment, message);
         break;
     case PStreamHeader::CLOSE_FILE:
-        s = _close_file(target_segment);
+        s = rowset_builder->close_file(target_segment);
+        s = rowset_builder->add_segment();
+        record_success_status();
         break;
-    case PStreamHeader::CLOSE_STREAM:
+    case PStreamHeader::CLOSE_TABLET:
         DCHECK(hdr.has_rowset_meta());
-#ifndef BE_TEST
-        s = _build_rowset(target_rowset, hdr.rowset_meta());
-        if (s.ok()) {
-            return _report_status(stream, target_rowset, true, s.to_string());
+        record_rowset_meta();
+        _report_status(stream, target_rowset, true, s.to_string());
+        break;
+    case PStreamHeader::CLOSE_INDEX:
+        break;
+        if (--num_flying_sender) {
+            // for each tablets in this index build meta
+            rowset_builder->build_rowset();
         }
-#endif
         break;
     default:
         DCHECK(false);
@@ -302,8 +298,23 @@ void LoadStream::_handle_message(StreamId stream, PStreamHeader hdr,
         LOG(WARNING) << "Failed to handle " << PStreamHeader_Opcode_Name(hdr.opcode())
                      << " message in stream (" << stream << "), target segment ("
                      << target_segment->to_string() << "), reason: " << s.to_string();
-        _report_status(stream, target_rowset, false, s.to_string());
+        // _report_status(stream, target_rowset, false, s.to_string());
+        record_failed_status();
     }
+}
+
+StreamRowsetBuilderPtr IndexStream::find_or_create_rowset_builder(int64_t tabletid) {
+    if (_rowset_builder_map.find(tabletid) == _rowset_builder_map.end()) {
+            _rowset_builder_map.emplace(tabletid, std::make_shared<StreamRowsetBuilder>());
+    }
+    return _rowset_builder_map[tabletid];
+}
+
+IndexStreamPtr LoadStream::find_or_create_index_stream(uint64_t index) {
+    if (_index_stream_map.find(index) == _index_stream_map.end()) {
+        _index_stream_map.emplace(index, std::make_shared<IndexStream>(index));
+    }
+    return _index_stream_map[index];
 }
 
 //TODO trigger build meta when last segment of all cluster is closed
@@ -319,6 +330,11 @@ int LoadStream::on_received_messages(StreamId id, butil::IOBuf* const messages[]
         PStreamHeader hdr;
         messageBuf->cutn(&hdr_buf, hdr_len);
         _parse_header(&hdr_buf, hdr);
+
+        IndexStreamPtr index_stream = find_or_create_index_stream(hdr.index_id());
+        if (hdr.has_tablet_id()) {
+            rowset_builder = index_stream->find_or_create_rowset_builder(hdr.tablet_id());
+        }
 
         TargetRowsetPtr target_rowset = std::make_shared<TargetRowset>();
         target_rowset->streamid = id;
@@ -361,8 +377,8 @@ int LoadStream::on_received_messages(StreamId id, butil::IOBuf* const messages[]
 
             token = _segment_token_map[target_segment];
         }
-        auto s = token->submit_func([this, id, hdr, target_rowset, target_segment, messageBuf]() {
-            _handle_message(id, hdr, target_rowset, target_segment, messageBuf);
+        auto s = token->submit_func([this, id, hdr, target_rowset, target_segment, index_stream, rowset_builder, messageBuf]() {
+            _handle_message(id, hdr, target_rowset, target_segment, index_stream, rowset_builder, messageBuf);
         });
         if (s != Status::OK()) {
             LOG(WARNING) << "Failed to submit task to threadpool, reason: " << s;

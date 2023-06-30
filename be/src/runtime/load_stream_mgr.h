@@ -38,7 +38,7 @@ public:
     LoadStreamMgr() = default;
     ~LoadStreamMgr() = default;
 
-    LoadStreamSharedPtr find_or_create_load(PUniqueId loadid);
+    LoadStreamSharedPtr find_or_create_load(PUniqueId loadid, size_t num_senders);
     void clear_load(PUniqueId loadid);
     Status bind_stream_to_load(LoadStreamSharedPtr loadstream, std::shared_ptr<StreamId> streamid);
     Status unbind_stream_to_load(LoadStreamSharedPtr loadstream);
