@@ -42,6 +42,7 @@ public:
     void clear_load(PUniqueId loadid);
     Status bind_stream_to_load(LoadStreamSharedPtr loadstream, std::shared_ptr<StreamId> streamid);
     Status unbind_stream_to_load(LoadStreamSharedPtr loadstream);
+    StreamIdPtr get_free_stream_id();
 
 private:
     std::map<std::string, LoadStreamSharedPtr> _load_streams;

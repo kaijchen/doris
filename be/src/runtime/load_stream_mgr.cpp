@@ -16,6 +16,7 @@
 // under the License.
 
 #include "runtime/load_stream_mgr.h"
+#include "runtime/load_stream.h"
 #include <runtime/exec_env.h>
 #include "gutil/ref_counted.h"
 #include "olap/lru_cache.h"
@@ -33,7 +34,7 @@ LoadStreamSharedPtr LoadStreamMgr::find_or_create_load(PUniqueId loadid, size_t 
     std::string loadid_str = loadid.SerializeAsString();
     std::lock_guard<std::mutex> l(_load_streams_lock);
     if (_load_streams.find(loadid_str) == _load_streams.end()) {
-        _load_streams[loadid_str] = std::make_shared<LoadStream>(num_senders);
+        // _load_streams[loadid_str] = std::make_shared<LoadStream>(num_senders);
     }
     return _load_streams[loadid_str];
 }
@@ -53,5 +54,10 @@ Status LoadStreamMgr::unbind_stream_to_load(LoadStreamSharedPtr loadstream) {
     CHECK(false); // not implemented
     return Status::OK();
 }
+
+StreamIdPtr LoadStreamMgr::get_free_stream_id() {
+    return std::make_shared<StreamId>();
+}
+
 
 } // namespace doris

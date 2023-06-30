@@ -262,12 +262,12 @@ void PInternalServiceImpl::open_stream_sink(google::protobuf::RpcController* con
     brpc::StreamOptions stream_options;
     ExecEnv* env = ExecEnv::GetInstance();
 
-    LoadStreamMgr* load_stream_mgr = env->load_stream_mgr();
+    LoadStreamMgr* load_stream_mgr = env->get_load_stream_mgr();
     LoadStreamSharedPtr load_stream = load_stream_mgr->find_or_create_load(request->id(), request->num_senders());
 
     stream_options.handler = load_stream.get();
 
-    StreamIdPtr streamid = env->get_sink_stream_mgr()->get_free_stream_id();
+    StreamIdPtr streamid = env->get_load_stream_mgr()->get_free_stream_id();
     load_stream_mgr->bind_stream_to_load(load_stream, streamid);
     LOG(INFO) << "OOXXOO: get streamid =" << streamid;
 

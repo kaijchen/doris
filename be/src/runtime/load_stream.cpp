@@ -16,6 +16,7 @@
 // under the License.
 
 #include "runtime/load_stream.h"
+#include "runtime/rowset_builder.h"
 #include <runtime/exec_env.h>
 #include "gutil/ref_counted.h"
 #include "runtime/load_channel.h"
@@ -260,36 +261,30 @@ Status LoadStream::_build_rowset(TargetRowsetPtr target_rowset,
 void LoadStream::_handle_message(StreamId stream, PStreamHeader hdr,
                                  TargetRowsetPtr target_rowset,
                                  TargetSegmentPtr target_segment,
-                                 index_stream,
-                                 rowset_builder,
+                                 IndexStreamPtr index_stream,
+                                 RowsetBuilderPtr rowset_builder,
                                  std::shared_ptr<butil::IOBuf> message) {
     Status s = Status::OK();
     std::string path;
     TabletSharedPtr tablet = nullptr;
 
+    uint32_t segid = 0;
+    uint32_t sender_id = 0;
     switch (hdr.opcode()) {
-    case PStreamHeader::OPEN_FILE:
-        s = rowset_builder->create_and_open_file(target_segment, path);
-        break;
     case PStreamHeader::APPEND_DATA:
-        s = rowset_builder->append_data(target_segment, message);
+        s = rowset_builder->append_data(segid, *message);
         break;
     case PStreamHeader::CLOSE_FILE:
-        s = rowset_builder->close_file(target_segment);
-        s = rowset_builder->add_segment();
-        record_success_status();
+        s = rowset_builder->close_segment(segid);
         break;
     case PStreamHeader::CLOSE_TABLET:
         DCHECK(hdr.has_rowset_meta());
-        record_rowset_meta();
+        // add segment
+        // rowset_builder->record_rowset_meta();
         _report_status(stream, target_rowset, true, s.to_string());
         break;
     case PStreamHeader::CLOSE_INDEX:
-        break;
-        if (--num_flying_sender) {
-            // for each tablets in this index build meta
-            rowset_builder->build_rowset();
-        }
+        index_stream->close(sender_id);
         break;
     default:
         DCHECK(false);
@@ -299,15 +294,21 @@ void LoadStream::_handle_message(StreamId stream, PStreamHeader hdr,
                      << " message in stream (" << stream << "), target segment ("
                      << target_segment->to_string() << "), reason: " << s.to_string();
         // _report_status(stream, target_rowset, false, s.to_string());
-        record_failed_status();
+        // record_failed_status();
     }
 }
 
-StreamRowsetBuilderPtr IndexStream::find_or_create_rowset_builder(int64_t tabletid) {
+RowsetBuilderPtr IndexStream::find_or_create_rowset_builder(int64_t tabletid) {
     if (_rowset_builder_map.find(tabletid) == _rowset_builder_map.end()) {
-            _rowset_builder_map.emplace(tabletid, std::make_shared<StreamRowsetBuilder>());
+           // _rowset_builder_map.emplace(tabletid, std::make_shared<RowsetBuilder>());
     }
     return _rowset_builder_map[tabletid];
+}
+
+Status IndexStream::close(uint32_t sender_id) {
+    // build
+    CHECK(false);
+    return Status::OK();
 }
 
 IndexStreamPtr LoadStream::find_or_create_index_stream(uint64_t index) {
@@ -332,6 +333,7 @@ int LoadStream::on_received_messages(StreamId id, butil::IOBuf* const messages[]
         _parse_header(&hdr_buf, hdr);
 
         IndexStreamPtr index_stream = find_or_create_index_stream(hdr.index_id());
+        RowsetBuilderPtr rowset_builder;
         if (hdr.has_tablet_id()) {
             rowset_builder = index_stream->find_or_create_rowset_builder(hdr.tablet_id());
         }
@@ -393,9 +395,7 @@ int LoadStream::on_received_messages(StreamId id, butil::IOBuf* const messages[]
 void LoadStream::on_idle_timeout(StreamId id) {}
 
 void LoadStream::on_closed(StreamId id) {
-    auto env = doris::ExecEnv::GetInstance();
-    StreamIdPtr id_ptr = std::make_shared<StreamId>(id);
-    env->get_sink_stream_mgr()->release_stream_id(id_ptr);
+    (void) id;
 }
 
 } // namespace doris

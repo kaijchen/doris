@@ -44,6 +44,13 @@ struct FlushContext {
     std::function<Status(int32_t)> generate_delete_bitmap;
 };
 
+struct SegmentStatistics {
+    int64_t row_num;
+    int64_t data_size;
+    int64_t index_size;
+    KeyBoundsPB key_bounds;
+};
+
 class RowsetWriter {
 public:
     RowsetWriter() = default;
@@ -58,6 +65,8 @@ public:
                                bool is_key, uint32_t max_rows_per_segment) {
         return Status::Error<ErrorCode::NOT_IMPLEMENTED_ERROR>();
     }
+
+    virtual void add_segment(uint32_t segid, SegmentStatistics& segstat) = 0;
 
     // Precondition: the input `rowset` should have the same type of the rowset we're building
     virtual Status add_rowset(RowsetSharedPtr rowset) = 0;

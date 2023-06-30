@@ -29,7 +29,7 @@
 #include "common/compiler_util.h" // IWYU pragma: keep
 #include "common/status.h"
 #include <runtime/sink_stream_mgr.h>
-#include <runtime/stream_rowset_builder.h>
+#include <runtime/rowset_builder.h>
 
 namespace doris {
 
@@ -65,9 +65,15 @@ class IndexStream {
 public:
     IndexStream(int64_t indexid): _indexid(indexid) {}
 
+    RowsetBuilderPtr find_or_create_rowset_builder(int64_t tablet_id);
+
+    Status close(uint32_t sender_id);
+
+    int64_t index_id() { return _indexid; }
+
 private:
     int64_t _indexid;
-    std::map<int64_t /*tabletid*/, StreamRowsetBuilder> _rowset_builder_map
+    std::map<int64_t /*tabletid*/, RowsetBuilderPtr> _rowset_builder_map;
 
 };
 using IndexStreamPtr = std::shared_ptr<IndexStream>;
@@ -80,12 +86,16 @@ public:
     int on_received_messages(StreamId id, butil::IOBuf* const messages[], size_t size) override;
     void on_idle_timeout(StreamId id) override;
     void on_closed(StreamId id) override;
-    IndexStreamPtr find_or_create_index_stream(int64_t indexid);
 
+    IndexStreamPtr find_or_create_index_stream(uint64_t indexid);
 
 private:
-    void _handle_message(StreamId id, PStreamHeader hdr, TargetRowsetPtr rowset,
-                         TargetSegmentPtr segment, std::shared_ptr<butil::IOBuf> message);
+    void _handle_message(StreamId stream, PStreamHeader hdr,
+                         TargetRowsetPtr target_rowset,
+                         TargetSegmentPtr target_segment,
+                         IndexStreamPtr index_stream,
+                         RowsetBuilderPtr rowset_builder,
+                         std::shared_ptr<butil::IOBuf> message);
     void _parse_header(butil::IOBuf* const message, PStreamHeader& hdr);
     Status _create_and_open_file(TargetSegmentPtr target_segment, std::string path);
     Status _append_data(TargetSegmentPtr target_segment, std::shared_ptr<butil::IOBuf> message);

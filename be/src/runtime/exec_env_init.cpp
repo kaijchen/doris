@@ -65,6 +65,7 @@
 #include "runtime/small_file_mgr.h"
 #include "runtime/stream_load/new_load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
+#include "runtime/load_stream_mgr.h"
 #include "runtime/task_group/task_group_manager.h"
 #include "runtime/thread_context.h"
 #include "runtime/vtablet_sink_v2_mgr.h"
@@ -168,7 +169,6 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _small_file_mgr = new SmallFileMgr(this, config::small_file_dir);
     _block_spill_mgr = new BlockSpillManager(_store_paths);
     _file_meta_cache = new FileMetaCache(config::max_external_file_meta_cache_num);
-    _sink_stream_mgr = new SinkStreamMgr();
     _table_sink_v2_mgr = new VOlapTableSinkV2Mgr();
 
     _backend_client_cache->init_metrics("backend");

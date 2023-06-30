@@ -30,7 +30,6 @@
 #include "olap/options.h"
 #include "runtime/sink_stream_mgr.h"
 #include "util/threadpool.h"
-#include "runtime/load_stream_mgr.h"
 
 namespace doris {
 class VOlapTableSinkV2Mgr;
@@ -60,6 +59,7 @@ class ResultBufferMgr;
 class ResultQueueMgr;
 class TMasterInfo;
 class LoadChannelMgr;
+class LoadStreamMgr;
 class StreamLoadExecutor;
 class RoutineLoadTaskExecutor;
 class SmallFileMgr;
@@ -165,7 +165,6 @@ public:
         return _function_client_cache;
     }
     LoadChannelMgr* load_channel_mgr() { return _load_channel_mgr; }
-    LoadStreamMgr* load_stream_mgr() { return _load_stream_mgr; }
     std::shared_ptr<NewLoadStreamMgr> new_load_stream_mgr() { return _new_load_stream_mgr; }
     SmallFileMgr* small_file_mgr() { return _small_file_mgr; }
     BlockSpillManager* block_spill_mgr() { return _block_spill_mgr; }
@@ -190,7 +189,7 @@ public:
         this->_stream_load_executor = stream_load_executor;
     }
 
-    SinkStreamMgr* get_sink_stream_mgr() { return _sink_stream_mgr; }
+    LoadStreamMgr* get_load_stream_mgr() { return _load_stream_mgr; }
 
     VOlapTableSinkV2Mgr* get_table_sink_v2_mgr() { return _table_sink_v2_mgr; }
 
@@ -254,7 +253,6 @@ private:
     BfdParser* _bfd_parser = nullptr;
     BrokerMgr* _broker_mgr = nullptr;
     LoadChannelMgr* _load_channel_mgr = nullptr;
-    LoadStreamMgr* _load_stream_mgr = nullptr;
     std::shared_ptr<NewLoadStreamMgr> _new_load_stream_mgr;
     BrpcClientCache<PBackendService_Stub>* _internal_client_cache = nullptr;
     BrpcClientCache<PFunctionService_Stub>* _function_client_cache = nullptr;
@@ -270,7 +268,7 @@ private:
     BlockSpillManager* _block_spill_mgr = nullptr;
     // To save meta info of external file, such as parquet footer.
     FileMetaCache* _file_meta_cache = nullptr;
-    SinkStreamMgr* _sink_stream_mgr = nullptr;
+    LoadStreamMgr* _load_stream_mgr = nullptr;
     VOlapTableSinkV2Mgr* _table_sink_v2_mgr = nullptr;
 };
 
