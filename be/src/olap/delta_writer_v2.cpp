@@ -423,9 +423,8 @@ Status DeltaWriterV2::close_wait() {
         LOG(WARNING) << "fail to build rowset";
         return Status::Error<MEM_ALLOC_FAILED>();
     }
-    if (config::experimental_olap_table_sink_v2) {
-        RETURN_IF_ERROR(_notify_last_segment());
-    }
+
+    RETURN_IF_ERROR(_notify_last_segment());
 
     Status res;
     {
@@ -546,8 +545,6 @@ void DeltaWriterV2::_build_current_tablet_schema(int64_t index_id,
 }
 
 Status DeltaWriterV2::_notify_last_segment() {
-    DCHECK(config::experimental_olap_table_sink_v2);
-
     brpc::StreamId stream = *_streams.begin();
     RowsetMetaPB rowset_meta_pb = _cur_rowset->rowset_meta()->get_rowset_pb();
 
