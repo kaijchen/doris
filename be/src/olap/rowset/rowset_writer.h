@@ -66,6 +66,7 @@ public:
         return Status::Error<ErrorCode::NOT_IMPLEMENTED_ERROR>();
     }
 
+    virtual Status create_file_writer(uint32_t segment_id, io::FileWriterPtr* writer) = 0;
     virtual void add_segment(uint32_t segid, SegmentStatistics& segstat) = 0;
 
     // Precondition: the input `rowset` should have the same type of the rowset we're building

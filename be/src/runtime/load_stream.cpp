@@ -32,6 +32,9 @@ namespace doris {
 
 TabletStream::TabletStream(int64_t id) : _id(id) {
     // TODO: init flush token
+    for (int i = 0; i < 10; i++) {
+        _flush_tokens.emplace_back(ExecEnv::GetInstance()->get_load_stream_mgr()->new_token());
+    }
 }
 
 void TabletStream::append_data(uint32_t segid, bool eos, butil::IOBuf* data) {
@@ -40,12 +43,12 @@ void TabletStream::append_data(uint32_t segid, bool eos, butil::IOBuf* data) {
     auto flush_func = [this, segid, buf]() {
          _rowset_builder->append_data(segid, buf);
     };
-    _flush_tokens[segid % _flush_tokens.size()].submit_func(flush_func);
+    _flush_tokens[segid % _flush_tokens.size()]->submit_func(flush_func);
 }
 
 Status TabletStream::close() {
     for (auto &token : _flush_tokens) {
-        token.wait();
+        token->wait();
     }
     return _rowset_builder->close();
 }

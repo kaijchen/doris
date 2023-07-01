@@ -30,6 +30,17 @@
 
 namespace doris {
 
+LoadStreamMgr::LoadStreamMgr(uint32_t segment_file_writer_thread_num) {
+    ThreadPoolBuilder("SegmentFileWriterThreadPool")
+            .set_min_threads(segment_file_writer_thread_num)
+            .set_max_threads(segment_file_writer_thread_num)
+            .build(&_file_writer_thread_pool);
+}
+
+LoadStreamMgr::~LoadStreamMgr() {
+    _file_writer_thread_pool->shutdown();
+}
+
 LoadStreamSharedPtr LoadStreamMgr::try_open_load_stream(PUniqueId load_id, size_t num_senders) {
     std::string load_id_str = load_id.SerializeAsString();
     LoadStreamSharedPtr load_stream;

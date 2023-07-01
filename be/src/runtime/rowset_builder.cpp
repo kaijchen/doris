@@ -172,15 +172,23 @@ Status RowsetBuilder::init() {
 
 Status RowsetBuilder::append_data(uint32_t segid, butil::IOBuf buf) {
     // phmap
-    (void) segid;
-    (void) buf;
+    Status st;
 
-    return Status::OK();
+    if (segid > _segment_file_writers.size() || _segment_file_writers[segid] == nullptr) {
+        io::FileWriterPtr file_writer;
+        st = _rowset_writer->create_file_writer(segid, &file_writer);
+        if (!st.ok()) {
+            return st;
+        }
+        _segment_file_writers[segid].reset(file_writer.release());
+    }
+
+    // TODO: IOBuf to Slice
+    return _segment_file_writers[segid]->append(buf.to_string());
 }
 
 Status RowsetBuilder::close_segment(uint32_t segid) {
-    (void) segid;
-    return Status::OK();
+    return _segment_file_writers[segid]->close();
 }
 
 void RowsetBuilder::add_segments(std::vector<SegmentStatistics>& segstats) {

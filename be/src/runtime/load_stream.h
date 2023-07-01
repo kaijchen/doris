@@ -43,7 +43,7 @@ public:
 private:
     int64_t _id;
     RowsetBuilderSharedPtr _rowset_builder;
-    std::vector<ThreadPoolToken> _flush_tokens;
+    std::vector<std::unique_ptr<ThreadPoolToken>> _flush_tokens;
 };
 using TabletStreamSharedPtr = std::shared_ptr<TabletStream>;
 
