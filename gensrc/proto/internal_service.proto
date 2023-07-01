@@ -700,17 +700,17 @@ message PStreamHeader {
     enum Opcode {
         OPEN_FILE = 0;
         APPEND_DATA = 1;
-        CLOSE_FILE = 2;
-        CLOSE_STREAM = 3;
+        CLOSE_LOAD = 2;
     }
     optional PUniqueId load_id = 1;
     optional int64 index_id = 2;
     optional int64 tablet_id = 3;
     optional int32 segment_id = 4;
     optional Opcode opcode = 5;
-    optional string rowset_id = 6;
+    optional bool segment_eos = 6;
     optional RowsetMetaPB rowset_meta = 7;
     optional int32 tablet_schema_hash = 8;
+    optional uint32 sender_id = 9;
 }
 
 service PBackendService {
