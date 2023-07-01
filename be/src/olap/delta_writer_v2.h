@@ -49,7 +49,7 @@ class StorageEngine;
 class TupleDescriptor;
 class SlotDescriptor;
 class OlapTableSchemaParam;
-class RowsetWriter;
+class BetaRowsetWriterV2;
 
 namespace vectorized {
 class Block;
@@ -75,6 +75,8 @@ public:
         bool is_high_priority = false;
         OlapTableSchemaParam* table_schema_param;
         int64_t index_id = 0;
+        TabletSchemaSPtr tablet_schema;
+        bool enable_unique_key_merge_on_write = false;
     };
 
     static Status open(WriteRequest* req, DeltaWriterV2** writer, RuntimeProfile* profile,
@@ -115,9 +117,9 @@ public:
     // Wait all memtable in flush queue to be flushed
     Status wait_flush();
 
-    int64_t tablet_id() { return _tablet->tablet_id(); }
+    int64_t tablet_id() { return _req.tablet_id; }
 
-    int32_t schema_hash() { return _tablet->schema_hash(); }
+    int32_t schema_hash() { return _req.schema_hash; }
 
     int64_t total_received_rows() const { return _total_received_rows; }
 
@@ -136,8 +138,6 @@ private:
 
     Status _notify_last_segment();
 
-    void _garbage_collection();
-
     void _reset_mem_table();
 
     void _build_current_tablet_schema(int64_t index_id,
@@ -151,13 +151,10 @@ private:
     bool _is_closed = false;
     Status _cancel_status;
     WriteRequest _req;
-    TabletSharedPtr _tablet;
     RowsetSharedPtr _cur_rowset;
-    std::unique_ptr<RowsetWriter> _rowset_writer;
+    std::unique_ptr<BetaRowsetWriterV2> _rowset_writer;
     // TODO: Recheck the lifetime of _mem_table, Look should use unique_ptr
     std::unique_ptr<MemTable> _mem_table;
-    std::unique_ptr<Schema> _schema;
-    //const TabletSchema* _tablet_schema;
     // tablet schema owned by delta writer, all write will use this tablet schema
     // it's build from tablet_schema（stored when create tablet） and OlapTableSchema
     // every request will have it's own tablet schema so simple schema change can work
@@ -174,12 +171,6 @@ private:
 
     std::mutex _lock;
 
-    DeleteBitmapPtr _delete_bitmap = nullptr;
-    // current rowset_ids, used to do diff in publish_version
-    RowsetIdUnorderedSet _rowset_ids;
-    // current max version, used to calculate delete bitmap
-    int64_t _cur_max_version;
-
     // total rows num written by DeltaWriterV2
     int64_t _total_received_rows = 0;
 
@@ -188,7 +179,6 @@ private:
     RuntimeProfile::Counter* _sort_timer = nullptr;
     RuntimeProfile::Counter* _agg_timer = nullptr;
     RuntimeProfile::Counter* _wait_flush_timer = nullptr;
-    RuntimeProfile::Counter* _delete_bitmap_timer = nullptr;
     RuntimeProfile::Counter* _segment_writer_timer = nullptr;
     RuntimeProfile::Counter* _memtable_duration_timer = nullptr;
     RuntimeProfile::Counter* _put_into_output_timer = nullptr;

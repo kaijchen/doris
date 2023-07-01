@@ -41,7 +41,6 @@
 #include "olap/rowset/rowset_meta.h"
 #include "olap/rowset/rowset_writer.h"
 #include "olap/rowset/rowset_writer_context.h"
-#include "segcompaction.h"
 #include "segment_v2/segment.h"
 #include "util/spinlock.h"
 
@@ -54,32 +53,30 @@ namespace segment_v2 {
 class SegmentWriter;
 } // namespace segment_v2
 
-using SegCompactionCandidates = std::vector<segment_v2::SegmentSharedPtr>;
-using SegCompactionCandidatesSharedPtr = std::shared_ptr<SegCompactionCandidates>;
 namespace vectorized::schema_util {
 class LocalSchemaChangeRecorder;
 }
 
-class BetaRowsetWriter : public RowsetWriter {
-    friend class SegcompactionWorker;
-
+class BetaRowsetWriterV2 : public RowsetWriter {
 public:
-    BetaRowsetWriter();
+    BetaRowsetWriterV2(const std::vector<brpc::StreamId>& streams);
 
-    ~BetaRowsetWriter() override;
+    ~BetaRowsetWriterV2() override;
 
     Status init(const RowsetWriterContext& rowset_writer_context) override;
 
-    Status add_block(const vectorized::Block* block) override;
+    Status add_block(const vectorized::Block* block) override {
+        return Status::Error<ErrorCode::NOT_IMPLEMENTED_ERROR>();
+    }
 
     // add rowset by create hard link
-    Status add_rowset(RowsetSharedPtr rowset) override;
+    Status add_rowset(RowsetSharedPtr rowset) override {
+        return Status::Error<ErrorCode::NOT_IMPLEMENTED_ERROR>();
+    }
 
-    Status add_rowset_for_linked_schema_change(RowsetSharedPtr rowset) override;
-
-    Status create_file_writer(uint32_t segment_id, io::FileWriterPtr* writer) override;
-
-    void add_segment(uint32_t segid, SegmentStatistics& segstat) override;
+    Status add_rowset_for_linked_schema_change(RowsetSharedPtr rowset) override {
+        return Status::Error<ErrorCode::NOT_IMPLEMENTED_ERROR>();
+    }
 
     Status flush() override;
 
@@ -90,7 +87,10 @@ public:
 
     RowsetSharedPtr build() override;
 
-    RowsetSharedPtr manual_build(const RowsetMetaSharedPtr& rowset_meta) override;
+    RowsetSharedPtr manual_build(const RowsetMetaSharedPtr& rowset_meta) override {
+        LOG(FATAL) << "not implemeted";
+        return nullptr;
+    }
 
     Version version() override { return _context.version; }
 
@@ -110,22 +110,13 @@ public:
 
     // Maybe modified by local schema change
     vectorized::schema_util::LocalSchemaChangeRecorder* mutable_schema_change_recorder() override {
-        return _context.schema_change_recorder.get();
+        LOG(FATAL) << "not implemeted";
+        return nullptr;
     }
 
-    SegcompactionWorker& get_segcompaction_worker() { return _segcompaction_worker; }
+    bool is_doing_segcompaction() const override { return false; }
 
-    Status flush_segment_writer_for_segcompaction(
-            std::unique_ptr<segment_v2::SegmentWriter>* writer, uint64_t index_size,
-            KeyBoundsPB& key_bounds);
-
-    bool is_doing_segcompaction() const override { return _is_doing_segcompaction; }
-
-    Status wait_flying_segcompaction() override;
-
-    void set_segment_start_id(int32_t start_id) override { _segment_start_id = start_id; }
-
-    int64_t delete_bitmap_ns() override { return _delete_bitmap_ns; }
+    Status wait_flying_segcompaction() override { return Status::OK(); }
 
 private:
     Status _do_add_block(const vectorized::Block* block,
@@ -135,39 +126,17 @@ private:
                       std::unique_ptr<segment_v2::SegmentWriter>* writer,
                       const FlushContext* flush_ctx = nullptr);
 
-    Status _create_file_writer(std::string path, io::FileWriterPtr* file_writer);
-    Status _create_file_writer(uint32_t begin, uint32_t end, io::FileWriterPtr* writer);
-
     Status _do_create_segment_writer(std::unique_ptr<segment_v2::SegmentWriter>* writer,
-                                     bool is_segcompaction, int64_t begin, int64_t end,
-                                     const FlushContext* ctx = nullptr);
+                                     int64_t begin, int64_t end, const FlushContext* ctx = nullptr);
     Status _create_segment_writer(std::unique_ptr<segment_v2::SegmentWriter>* writer,
                                   const FlushContext* ctx = nullptr);
     Status _flush_segment_writer(std::unique_ptr<segment_v2::SegmentWriter>* writer,
                                  int64_t* flush_size = nullptr);
-    Status _generate_delete_bitmap(int32_t segment_id);
     void _build_rowset_meta(std::shared_ptr<RowsetMeta> rowset_meta);
-    Status _segcompaction_if_necessary();
-    Status _segcompaction_ramaining_if_necessary();
-    Status _load_noncompacted_segments(std::vector<segment_v2::SegmentSharedPtr>* segments,
-                                       size_t num);
-    Status _find_longest_consecutive_small_segment(SegCompactionCandidatesSharedPtr segments);
-    Status _get_segcompaction_candidates(SegCompactionCandidatesSharedPtr& segments, bool is_last);
-    bool _is_segcompacted() { return (_num_segcompacted > 0) ? true : false; }
-
-    bool _check_and_set_is_doing_segcompaction();
 
     void _build_rowset_meta_with_spec_field(RowsetMetaSharedPtr rowset_meta,
                                             const RowsetMetaSharedPtr& spec_rowset_meta);
     bool _is_segment_overlapping(const std::vector<KeyBoundsPB>& segments_encoded_key_bounds);
-    void _clear_statistics_for_deleting_segments_unsafe(uint64_t begin, uint64_t end);
-    Status _rename_compacted_segments(int64_t begin, int64_t end);
-    Status _rename_compacted_segment_plain(uint64_t seg_id);
-    Status _rename_compacted_indices(int64_t begin, int64_t end, uint64_t seg_id);
-
-    // build a tmp rowset for load segment to calc delete_bitmap
-    // for this segment
-    RowsetSharedPtr _build_tmp();
 
 protected:
     RowsetWriterContext _context;
@@ -178,10 +147,6 @@ protected:
     std::atomic<int32_t> _num_segment;     // number of consecutive flushed segments
     roaring::Roaring _segment_set;         // bitmap set to record flushed segment id
     std::mutex _segment_set_mutex;         // mutex for _segment_set
-    int32_t _segment_start_id; //basic write start from 0, partial update may be different
-    std::atomic<int32_t> _segcompacted_point; // segemnts before this point have
-                                              // already been segment compacted
-    std::atomic<int32_t> _num_segcompacted;   // index for segment compaction
     /// When flushing the memtable in the load process, we do not use this writer but an independent writer.
     /// Because we want to flush memtables in parallel.
     /// In other processes, such as merger or schema change, we will use this unified writer for data writing.
@@ -204,27 +169,23 @@ protected:
     // written rows by add_block/add_row (not effected by segcompaction)
     std::atomic<int64_t> _raw_num_rows_written;
 
-    std::map<uint32_t, SegmentStatistics> _segid_statistics_map;
+    struct Statistics {
+        int64_t row_num;
+        int64_t data_size;
+        int64_t index_size;
+        KeyBoundsPB key_bounds;
+    };
+    std::map<uint32_t, Statistics> _segid_statistics_map;
     std::mutex _segid_statistics_map_mutex;
 
     bool _is_pending = false;
     bool _already_built = false;
 
-    SegcompactionWorker _segcompaction_worker;
-
-    // ensure only one inflight segcompaction task for each rowset
-    std::atomic<bool> _is_doing_segcompaction;
-    // enforce compare-and-swap on _is_doing_segcompaction
-    std::mutex _is_doing_segcompaction_lock;
-    std::condition_variable _segcompacting_cond;
-
-    std::atomic<int> _segcompaction_status;
-
     fmt::memory_buffer vlog_buffer;
 
-    std::shared_ptr<MowContext> _mow_context;
+    std::vector<brpc::StreamId> _streams;
 
-    int64_t _delete_bitmap_ns = 0;
+    int64_t _index_id;
 };
 
 } // namespace doris

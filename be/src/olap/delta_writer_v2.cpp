@@ -43,7 +43,7 @@
 #include "olap/memtable_flush_executor.h"
 #include "olap/olap_define.h"
 #include "olap/rowset/beta_rowset.h"
-#include "olap/rowset/beta_rowset_writer.h"
+#include "olap/rowset/beta_rowset_writer_v2.h"
 #include "olap/rowset/rowset_meta.h"
 #include "olap/rowset/rowset_writer.h"
 #include "olap/rowset/rowset_writer_context.h"
@@ -77,7 +77,6 @@ Status DeltaWriterV2::open(WriteRequest* req, DeltaWriterV2** writer, RuntimePro
 DeltaWriterV2::DeltaWriterV2(WriteRequest* req, StorageEngine* storage_engine,
                              RuntimeProfile* profile, const UniqueId& load_id)
         : _req(*req),
-          _tablet(nullptr),
           _cur_rowset(nullptr),
           _rowset_writer(nullptr),
           _tablet_schema(new TabletSchema),
@@ -96,7 +95,6 @@ void DeltaWriterV2::_init_profile(RuntimeProfile* profile) {
     _segment_writer_timer = ADD_TIMER(_profile, "SegmentWriterTime");
     _wait_flush_timer = ADD_TIMER(_profile, "MemTableWaitFlushTime");
     _put_into_output_timer = ADD_TIMER(_profile, "MemTablePutIntoOutputTime");
-    _delete_bitmap_timer = ADD_TIMER(_profile, "MemTableDeleteBitmapTime");
     _close_wait_timer = ADD_TIMER(_profile, "DeltaWriterV2CloseWaitTime");
     _rowset_build_timer = ADD_TIMER(_profile, "RowsetBuildTime");
     _commit_txn_timer = ADD_TIMER(_profile, "CommitTxnTime");
@@ -108,9 +106,6 @@ void DeltaWriterV2::_init_profile(RuntimeProfile* profile) {
 }
 
 DeltaWriterV2::~DeltaWriterV2() {
-    if (_is_init && !_delta_written_success) {
-        _garbage_collection();
-    }
 
     if (!_is_init) {
         return;
@@ -119,82 +114,17 @@ DeltaWriterV2::~DeltaWriterV2() {
     if (_flush_token != nullptr) {
         // cancel and wait all memtables in flush queue to be finished
         _flush_token->cancel();
-
-        if (_tablet != nullptr) {
-            const FlushStatistic& stat = _flush_token->get_stats();
-            _tablet->flush_bytes->increment(stat.flush_size_bytes);
-            _tablet->flush_finish_count->increment(stat.flush_finish_count);
-        }
-    }
-
-    if (_tablet != nullptr) {
-        _tablet->data_dir()->remove_pending_ids(ROWSET_ID_PREFIX +
-                                                _rowset_writer->rowset_id().to_string());
     }
 
     _mem_table.reset();
 }
 
-void DeltaWriterV2::_garbage_collection() {
-    Status rollback_status = Status::OK();
-    TxnManager* txn_mgr = _storage_engine->txn_manager();
-    if (_tablet != nullptr) {
-        rollback_status = txn_mgr->rollback_txn(_req.partition_id, _tablet, _req.txn_id);
-    }
-    // has to check rollback status, because the rowset maybe committed in this thread and
-    // published in another thread, then rollback will failed.
-    // when rollback failed should not delete rowset
-    if (rollback_status.ok()) {
-        _storage_engine->add_unused_rowset(_cur_rowset);
-    }
-}
-
 Status DeltaWriterV2::init() {
     TabletManager* tablet_mgr = _storage_engine->tablet_manager();
-    _tablet = tablet_mgr->get_tablet(_req.tablet_id);
-    if (_tablet == nullptr) {
-        LOG(WARNING) << "fail to find tablet. tablet_id=" << _req.tablet_id
-                     << ", schema_hash=" << _req.schema_hash;
-        return Status::Error<TABLE_NOT_FOUND>();
-    }
-
-    // get rowset ids snapshot
-    if (_tablet->enable_unique_key_merge_on_write()) {
-        std::lock_guard<std::shared_mutex> lck(_tablet->get_header_lock());
-        _cur_max_version = _tablet->max_version_unlocked().second;
-        _rowset_ids = _tablet->all_rs_id(_cur_max_version);
-    }
-
-    // check tablet version number
-    if (!config::disable_auto_compaction &&
-        _tablet->exceed_version_limit(config::max_tablet_version_num - 100) &&
-        !MemInfo::is_exceed_soft_mem_limit(GB_EXCHANGE_BYTE)) {
-        //trigger compaction
-        StorageEngine::instance()->submit_compaction_task(
-                _tablet, CompactionType::CUMULATIVE_COMPACTION, true);
-        if (_tablet->version_count() > config::max_tablet_version_num) {
-            LOG(WARNING) << "failed to init delta writer. version count: "
-                         << _tablet->version_count()
-                         << ", exceed limit: " << config::max_tablet_version_num
-                         << ". tablet: " << _tablet->full_name();
-            return Status::Error<TOO_MANY_VERSION>();
-        }
-    }
-
-    {
-        std::shared_lock base_migration_rlock(_tablet->get_migration_lock(), std::try_to_lock);
-        if (!base_migration_rlock.owns_lock()) {
-            return Status::Error<TRY_LOCK_FAILED>();
-        }
-        std::lock_guard<std::mutex> push_lock(_tablet->get_push_lock());
-        RETURN_IF_ERROR(_storage_engine->txn_manager()->prepare_txn(_req.partition_id, _tablet,
-                                                                    _req.txn_id, _req.load_id));
-    }
-    if (_tablet->enable_unique_key_merge_on_write() && _delete_bitmap == nullptr) {
-        _delete_bitmap.reset(new DeleteBitmap(_tablet->tablet_id()));
-    }
+    // TODO: remove tablet
+    auto tablet = tablet_mgr->get_tablet(_req.tablet_id);
     // build tablet schema in request level
-    _build_current_tablet_schema(_req.index_id, _req.table_schema_param, *_tablet->tablet_schema());
+    _build_current_tablet_schema(_req.index_id, _req.table_schema_param, *_req.tablet_schema.get());
     RowsetWriterContext context;
     context.txn_id = _req.txn_id;
     context.load_id = _req.load_id;
@@ -204,15 +134,21 @@ Status DeltaWriterV2::init() {
     context.segments_overlap = OVERLAPPING;
     context.tablet_schema = _tablet_schema;
     context.newest_write_timestamp = UnixSeconds();
-    context.tablet_id = _tablet->table_id();
-    context.tablet = _tablet;
+    context.tablet = nullptr;
     context.write_type = DataWriteType::TYPE_DIRECT;
-    context.mow_context = std::make_shared<MowContext>(_cur_max_version, _req.txn_id, _rowset_ids,
-                                                       _delete_bitmap);
-    RETURN_IF_ERROR(_tablet->create_rowset_writer(context, &_rowset_writer));
-    _rowset_writer->add_streams(_streams);
+    context.tablet_id = _req.tablet_id;
+    context.partition_id = _req.partition_id;
+    context.tablet_schema_hash = _req.schema_hash;
+    context.enable_unique_key_merge_on_write = _req.enable_unique_key_merge_on_write;
+    context.rowset_type = RowsetTypePB::BETA_ROWSET;
+    context.rowset_id = StorageEngine::instance()->next_rowset_id();
+    context.data_dir = nullptr;
+    context.tablet_uid = tablet->tablet_uid();
+    context.rowset_dir = tablet->tablet_path();
 
-    _schema.reset(new Schema(_tablet_schema));
+    _rowset_writer = std::make_unique<BetaRowsetWriterV2>(_streams);
+    _rowset_writer->init(context);
+
     _reset_mem_table();
 
     // create flush handler
@@ -353,10 +289,8 @@ void DeltaWriterV2::_reset_mem_table() {
         _mem_table_insert_trackers.push_back(mem_table_insert_tracker);
         _mem_table_flush_trackers.push_back(mem_table_flush_tracker);
     }
-    auto mow_context = std::make_shared<MowContext>(_cur_max_version, _req.txn_id, _rowset_ids,
-                                                    _delete_bitmap);
-    _mem_table.reset(new MemTable(_tablet, _schema.get(), _tablet_schema.get(), _req.slots,
-                                  _req.tuple_desc, _rowset_writer.get(), mow_context,
+    _mem_table.reset(new MemTable(_req.tablet_id, _tablet_schema.get(), _req.slots, _req.tuple_desc,
+                                  _rowset_writer.get(), _req.enable_unique_key_merge_on_write,
                                   mem_table_insert_tracker, mem_table_flush_tracker));
 
     COUNTER_UPDATE(_segment_num, 1);
@@ -366,7 +300,6 @@ void DeltaWriterV2::_reset_mem_table() {
         COUNTER_SET(_agg_timer, _memtable_stat.agg_ns);
         COUNTER_SET(_memtable_duration_timer, _memtable_stat.duration_ns);
         COUNTER_SET(_segment_writer_timer, _memtable_stat.segment_writer_ns);
-        COUNTER_SET(_delete_bitmap_timer, _memtable_stat.delete_bitmap_ns);
         COUNTER_SET(_put_into_output_timer, _memtable_stat.put_into_output_ns);
         COUNTER_SET(_sort_times, _memtable_stat.sort_times);
         COUNTER_SET(_agg_times, _memtable_stat.agg_times);
@@ -425,7 +358,7 @@ Status DeltaWriterV2::close_wait() {
         st = _flush_token->wait();
     }
     if (UNLIKELY(!st.ok())) {
-        LOG(WARNING) << "previous flush failed tablet " << _tablet->tablet_id();
+        LOG(WARNING) << "previous flush failed tablet " << tablet_id();
         return st;
     }
 
@@ -447,53 +380,15 @@ Status DeltaWriterV2::close_wait() {
         LOG(WARNING) << "fail to build rowset";
         return Status::Error<MEM_ALLOC_FAILED>();
     }
-    if (config::experimental_olap_table_sink_v2) {
-        RETURN_IF_ERROR(_notify_last_segment());
-    }
 
-    if (_tablet->enable_unique_key_merge_on_write()) {
-        auto beta_rowset = reinterpret_cast<BetaRowset*>(_cur_rowset.get());
-        std::vector<segment_v2::SegmentSharedPtr> segments;
-        RETURN_IF_ERROR(beta_rowset->load_segments(&segments));
-        // tablet is under alter process. The delete bitmap will be calculated after conversion.
-        if (_tablet->tablet_state() == TABLET_NOTREADY &&
-            SchemaChangeHandler::tablet_in_converting(_tablet->tablet_id())) {
-            return Status::OK();
-        }
-        if (segments.size() > 1) {
-            // calculate delete bitmap between segments
-            RETURN_IF_ERROR(_tablet->calc_delete_bitmap_between_segments(_cur_rowset, segments,
-                                                                         _delete_bitmap));
-        }
-        RETURN_IF_ERROR(_tablet->commit_phase_update_delete_bitmap(
-                _cur_rowset, _rowset_ids, _delete_bitmap, segments, _req.txn_id,
-                _rowset_writer.get()));
-    }
-
-    Status res;
-    {
-        SCOPED_TIMER(_commit_txn_timer);
-        res = _storage_engine->txn_manager()->commit_txn(_req.partition_id, _tablet, _req.txn_id,
-                                                         _req.load_id, _cur_rowset, false);
-    }
-
-    if (!res && !res.is<PUSH_TRANSACTION_ALREADY_EXIST>()) {
-        LOG(WARNING) << "Failed to commit txn: " << _req.txn_id
-                     << " for rowset: " << _cur_rowset->rowset_id();
-        return res;
-    }
-    if (_tablet->enable_unique_key_merge_on_write()) {
-        _storage_engine->txn_manager()->set_txn_related_delete_bitmap(
-                _req.partition_id, _req.txn_id, _tablet->tablet_id(), _tablet->schema_hash(),
-                _tablet->tablet_uid(), true, _delete_bitmap, _rowset_ids);
-    }
+    RETURN_IF_ERROR(_notify_last_segment());
 
     _delta_written_success = true;
 
     // const FlushStatistic& stat = _flush_token->get_stats();
     // print slow log if wait more than 1s
     /*if (_wait_flush_timer->elapsed_time() > 1000UL * 1000 * 1000) {
-        LOG(INFO) << "close delta writer for tablet: " << _tablet->tablet_id()
+        LOG(INFO) << "close delta writer for tablet: " << tablet_id()
                   << ", load id: " << print_id(_req.load_id) << ", wait close for "
                   << _wait_flush_timer->elapsed_time() << "(ns), stats: " << stat;
     }*/
@@ -510,9 +405,6 @@ Status DeltaWriterV2::cancel_with_status(const Status& st) {
     std::lock_guard<std::mutex> l(_lock);
     if (_is_cancelled) {
         return Status::OK();
-    }
-    if (_rowset_writer && _rowset_writer->is_doing_segcompaction()) {
-        _rowset_writer->wait_flying_segcompaction(); /* already cancel, ignore the return status */
     }
     _mem_table.reset();
     if (_flush_token != nullptr) {
@@ -586,9 +478,6 @@ void DeltaWriterV2::_build_current_tablet_schema(int64_t index_id,
         _tablet_schema->build_current_tablet_schema(index_id, table_schema_param->version(),
                                                     indexes[i], ori_tablet_schema);
     }
-    if (_tablet_schema->schema_version() > ori_tablet_schema.schema_version()) {
-        _tablet->update_max_version_schema(_tablet_schema);
-    }
 
     _tablet_schema->set_table_id(table_schema_param->table_id());
     // set partial update columns info
@@ -597,8 +486,6 @@ void DeltaWriterV2::_build_current_tablet_schema(int64_t index_id,
 }
 
 Status DeltaWriterV2::_notify_last_segment() {
-    DCHECK(config::experimental_olap_table_sink_v2);
-
     brpc::StreamId stream = *_streams.begin();
     RowsetMetaPB rowset_meta_pb = _cur_rowset->rowset_meta()->get_rowset_pb();
 

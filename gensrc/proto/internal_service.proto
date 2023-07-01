@@ -683,10 +683,14 @@ message POpenStreamSinkRequest {
     optional PUniqueId id = 1;
     optional int32 num_senders = 2;
     optional int64 txnid = 3;
+    optional int64 tablet_id = 4;
+    optional int32 backend_id = 5;
 };
 
 message POpenStreamSinkResponse {
     optional PStatus status = 1;
+    optional TabletSchemaPB tablet_schema = 2;
+    optional bool enable_unique_key_merge_on_write = 3;
 };
 
 message PWriteStreamSinkResponse {

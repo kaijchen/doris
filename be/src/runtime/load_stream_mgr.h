@@ -28,7 +28,6 @@
 // IWYU pragma: no_include <opentelemetry/common/threadlocal.h>
 #include "common/compiler_util.h" // IWYU pragma: keep
 #include "common/status.h"
-#include <runtime/sink_stream_mgr.h>
 #include <runtime/load_stream.h>
 
 namespace doris {

@@ -28,7 +28,6 @@
 
 #include "common/status.h"
 #include "olap/options.h"
-#include "runtime/sink_stream_mgr.h"
 #include "util/threadpool.h"
 
 namespace doris {

@@ -65,6 +65,9 @@
 namespace doris {
 using namespace ErrorCode;
 
+SegcompactionWorker::SegcompactionWorker(BetaRowsetWriter* writer) : _writer(writer) {
+}
+
 Status SegcompactionWorker::_get_segcompaction_reader(
         SegCompactionCandidatesSharedPtr segments, TabletSharedPtr tablet,
         std::shared_ptr<Schema> schema, OlapReaderStatistics* stat,

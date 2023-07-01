@@ -777,7 +777,22 @@ Status BetaRowsetWriter::_do_create_segment_writer(
         segment_id = segid_offset + _segment_start_id;
         st = create_file_writer(segment_id, &file_writer);
     }
+<<<<<<< HEAD
+    if (config::experimental_olap_table_sink_v2) {
+        auto index_id = _index_id;
+        auto tablet_id = _rowset_meta->tablet_id();
+        auto load_id = _rowset_meta->load_id();
+        auto stream_id = *_streams.begin();
+        auto schema_hash = _context.tablet_schema_hash;
 
+        auto stream_writer = std::make_unique<io::StreamSinkFileWriter>(stream_id);
+        stream_writer->init(load_id, index_id, tablet_id, segment_id, schema_hash);
+        file_writer = std::move(stream_writer);
+    }
+=======
+    io::FileWriterPtr file_writer;
+    Status st = fs->create_file(path, &file_writer);
+>>>>>>> kaijie/move-memtable-dev
     if (!st.ok()) {
         return st;
     }

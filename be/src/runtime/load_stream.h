@@ -28,7 +28,6 @@
 // IWYU pragma: no_include <opentelemetry/common/threadlocal.h>
 #include "common/compiler_util.h" // IWYU pragma: keep
 #include "common/status.h"
-#include <runtime/sink_stream_mgr.h>
 #include <runtime/rowset_builder.h>
 
 namespace doris {
@@ -63,7 +62,8 @@ private:
 };
 using IndexStreamSharedPtr = std::shared_ptr<IndexStream>;
 
-class LoadStream : public StreamInputHandler {
+using StreamId = brpc::StreamId;
+class LoadStream : public brpc::StreamInputHandler {
 public:
     LoadStream(PUniqueId load_id, uint32_t num_senders);
     ~LoadStream();

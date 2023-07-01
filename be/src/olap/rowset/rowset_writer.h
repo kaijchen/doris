@@ -41,7 +41,6 @@ struct FlushContext {
     TabletSchemaSPtr flush_schema = nullptr;
     const vectorized::Block* block = nullptr;
     std::optional<int32_t> segment_id = std::nullopt;
-    std::function<Status(int32_t)> generate_delete_bitmap;
 };
 
 struct SegmentStatistics {
@@ -66,8 +65,13 @@ public:
         return Status::Error<ErrorCode::NOT_IMPLEMENTED_ERROR>();
     }
 
-    virtual Status create_file_writer(uint32_t segment_id, io::FileWriterPtr* writer) = 0;
-    virtual void add_segment(uint32_t segid, SegmentStatistics& segstat) = 0;
+    virtual Status create_file_writer(uint32_t segment_id, io::FileWriterPtr* writer) {
+        return Status::Error<ErrorCode::NOT_IMPLEMENTED_ERROR>();
+    }
+
+    virtual void add_segment(uint32_t segid, SegmentStatistics& segstat) {
+        CHECK(false);
+    }
 
     // Precondition: the input `rowset` should have the same type of the rowset we're building
     virtual Status add_rowset(RowsetSharedPtr rowset) = 0;
@@ -91,11 +95,6 @@ public:
     // finish building and return pointer to the built rowset (guaranteed to be inited).
     // return nullptr when failed
     virtual RowsetSharedPtr build() = 0;
-
-    // we have to load segment data to build delete_bitmap for current segment,
-    // so we  build a tmp rowset ptr to load segment data.
-    // real build will be called in DeltaWriter close_wait.
-    virtual RowsetSharedPtr build_tmp() = 0;
 
     // For ordered rowset compaction, manual build rowset
     virtual RowsetSharedPtr manual_build(const RowsetMetaSharedPtr& rowset_meta) = 0;
@@ -123,7 +122,7 @@ public:
     virtual vectorized::schema_util::LocalSchemaChangeRecorder*
     mutable_schema_change_recorder() = 0;
 
-    virtual void add_streams(std::vector<brpc::StreamId>& streams) {}
+    virtual int64_t delete_bitmap_ns() { return 0; }
 
 private:
     DISALLOW_COPY_AND_ASSIGN(RowsetWriter);

@@ -297,8 +297,21 @@ Status VOlapTableSinkV2::_init_stream_pool(const NodeInfo& node_info, StreamPool
                 node_info.host, node_info.brpc_port);
         POpenStreamSinkRequest request;
         request.set_allocated_id(&_load_id);
+        request.set_tablet_id(_location->any_tablet_id());
+        request.set_backend_id(node_info.id);
         POpenStreamSinkResponse response;
         stub->open_stream_sink(&cntl, &request, &response, nullptr);
+        // TODO: this is a debug log
+        LOG(INFO) << "Got tablet schema of " << request.tablet_id() << " from backend "
+                  << node_info.id << ": num_short_key_columns = "
+                  << response.tablet_schema().num_short_key_columns()
+                  << ", num_rows_per_row_block = "
+                  << response.tablet_schema().num_rows_per_row_block()
+                  << ", enable_unique_key_merge_on_write = "
+                  << response.enable_unique_key_merge_on_write();
+        _tablet_schema = std::make_shared<TabletSchema>();
+        _tablet_schema->init_from_pb(response.tablet_schema());
+        _enable_unique_key_merge_on_write = response.enable_unique_key_merge_on_write();
         request.release_id();
         if (cntl.Failed()) {
             LOG(ERROR) << "Fail to connect stream, " << cntl.ErrorText();
@@ -508,6 +521,8 @@ void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
             wrequest.tuple_desc = sink->_output_tuple_desc;
             wrequest.is_high_priority = sink->_is_high_priority;
             wrequest.table_schema_param = sink->_schema.get();
+            wrequest.tablet_schema = sink->_tablet_schema;
+            wrequest.enable_unique_key_merge_on_write = sink->_enable_unique_key_merge_on_write;
             for (auto& index : sink->_schema->indexes()) {
                 if (index->index_id == ctx->index_id) {
                     wrequest.slots = &index->slots;

@@ -83,7 +83,6 @@
 #include "runtime/load_channel_mgr.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
-#include "runtime/sink_stream_mgr.h"
 #include "runtime/stream_load/new_load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/thread_context.h"
@@ -256,10 +255,26 @@ void PInternalServiceImpl::open_stream_sink(google::protobuf::RpcController* con
                                             POpenStreamSinkResponse* response,
                                             google::protobuf::Closure* done) {
     brpc::ClosureGuard done_guard(done);
-    LOG(INFO) << "OOXXOO: open stream sink"; //TODO: remove log
+    LOG(INFO) << "OOXXOO: open stream sink, backend_id = "; //TODO: remove log
     std::unique_ptr<PStatus> status = std::make_unique<PStatus>();
     brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
     brpc::StreamOptions stream_options;
+
+    /*
+    if (request->has_tablet_id()) {
+        TabletManager* tablet_mgr = StorageEngine::instance()->tablet_manager();
+        TabletSharedPtr tablet = tablet_mgr->get_tablet(request->tablet_id());
+        if (tablet == nullptr) {
+            cntl->SetFailed("Tablet not found");
+            status->set_status_code(TStatusCode::NOT_FOUND);
+            response->set_allocated_status(status.get());
+            response->release_status();
+            return;
+        }
+        tablet->tablet_schema()->to_schema_pb(response->mutable_tablet_schema());
+        response->set_enable_unique_key_merge_on_write(tablet->enable_unique_key_merge_on_write());
+    }*/
+
     ExecEnv* env = ExecEnv::GetInstance();
 
     auto load_stream_mgr = env->get_load_stream_mgr();
