@@ -262,22 +262,21 @@ void PInternalServiceImpl::open_stream_sink(google::protobuf::RpcController* con
     brpc::StreamOptions stream_options;
     ExecEnv* env = ExecEnv::GetInstance();
 
-    LoadStreamMgr* load_stream_mgr = env->get_load_stream_mgr();
-    LoadStreamSharedPtr load_stream = load_stream_mgr->find_or_create_load(request->id(), request->num_senders());
+    auto load_stream_mgr = env->get_load_stream_mgr();
+    auto load_stream = load_stream_mgr->try_open_load_stream(request->id(), request->num_senders());
 
     stream_options.handler = load_stream.get();
 
-    StreamIdPtr streamid = env->get_load_stream_mgr()->get_free_stream_id();
-    load_stream_mgr->bind_stream_to_load(load_stream, streamid);
-    LOG(INFO) << "OOXXOO: get streamid =" << streamid;
+    StreamId streamid;
 
-    if (brpc::StreamAccept(streamid.get(), *cntl, &stream_options) != 0) {
+    if (brpc::StreamAccept(&streamid, *cntl, &stream_options) != 0) {
         cntl->SetFailed("Fail to accept stream");
         status->set_status_code(TStatusCode::CANCELLED);
         response->set_allocated_status(status.get());
         response->release_status();
         return;
     }
+    LOG(INFO) << "OOXXOO: get streamid =" << streamid;
 
     status->set_status_code(TStatusCode::OK);
     response->set_allocated_status(status.get());

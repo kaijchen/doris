@@ -72,15 +72,13 @@ public:
 
     Status init();
 
-    Status append_data(uint32_t segid, butil::IOBuf& buf);
+    Status append_data(uint32_t segid, butil::IOBuf buf);
     Status close_segment(uint32_t segid);
 
     void add_segments(std::vector<SegmentStatistics>& segstat);
 
-    // flush the last memtable to flush queue, must call it before close_wait()
-    Status close();
     // wait for all memtables to be flushed.
-    Status close_wait();
+    Status close();
 
     // abandon current memtable and wait for all pending-flushing memtables to be destructed.
     // mem_consumption() should be 0 after this function returns.
@@ -109,7 +107,6 @@ private:
     // it's build from tablet_schema（stored when create tablet） and OlapTableSchema
     // every request will have it's own tablet schema so simple schema change can work
     TabletSchemaSPtr _tablet_schema;
-    bool _delta_written_success;
 
     StorageEngine* _storage_engine;
     UniqueId _load_id;
@@ -120,8 +117,10 @@ private:
     RowsetIdUnorderedSet _rowset_ids;
     // current max version, used to calculate delete bitmap
     int64_t _cur_max_version;
+
+    bool _success;
 };
 
-using RowsetBuilderPtr = std::shared_ptr<RowsetBuilder>;
+using RowsetBuilderSharedPtr = std::shared_ptr<RowsetBuilder>;
 
 } // namespace doris

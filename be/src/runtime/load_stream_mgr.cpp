@@ -30,34 +30,28 @@
 
 namespace doris {
 
-LoadStreamSharedPtr LoadStreamMgr::find_or_create_load(PUniqueId loadid, size_t num_senders) {
-    std::string loadid_str = loadid.SerializeAsString();
-    std::lock_guard<std::mutex> l(_load_streams_lock);
-    if (_load_streams.find(loadid_str) == _load_streams.end()) {
-        // _load_streams[loadid_str] = std::make_shared<LoadStream>(num_senders);
+LoadStreamSharedPtr LoadStreamMgr::try_open_load_stream(PUniqueId load_id, size_t num_senders) {
+    std::string load_id_str = load_id.SerializeAsString();
+    LoadStreamSharedPtr load_stream;
+
+    {
+        std::lock_guard l(_lock);
+        auto it = _load_streams_map.find(load_id_str);
+        if (it != _load_streams_map.end()) {
+            load_stream = it->second;
+        } else {
+            load_stream = std::make_shared<LoadStream>(load_id, num_senders);
+            _load_streams_map[load_id_str] = load_stream;
+        }
     }
-    return _load_streams[loadid_str];
+    load_stream->add_rpc_stream();
+    return load_stream;
 }
 
-void LoadStreamMgr::clear_load(PUniqueId loadid) {
-    std::string loadid_str = loadid.SerializeAsString();
-    _load_streams.erase(loadid_str);
+void LoadStreamMgr::clear_load(PUniqueId load_id) {
+    std::string load_id_str = load_id.SerializeAsString();
+    std::lock_guard l(_lock);
+    _load_streams_map.erase(load_id_str);
 }
-
-Status LoadStreamMgr::bind_stream_to_load(LoadStreamSharedPtr loadstream, std::shared_ptr<StreamId> streamid) {
-    std::lock_guard<std::mutex> l(_load_stream_to_streamid_lock);
-    _load_stream_to_streamid[loadstream] = streamid;
-    return Status::OK();
-}
-
-Status LoadStreamMgr::unbind_stream_to_load(LoadStreamSharedPtr loadstream) {
-    CHECK(false); // not implemented
-    return Status::OK();
-}
-
-StreamIdPtr LoadStreamMgr::get_free_stream_id() {
-    return std::make_shared<StreamId>();
-}
-
 
 } // namespace doris

@@ -28,34 +28,15 @@ StreamSinkFileWriter::StreamSinkFileWriter(brpc::StreamId stream_id) : _stream(s
 
 StreamSinkFileWriter::~StreamSinkFileWriter() {}
 
-Status StreamSinkFileWriter::init(PUniqueId load_id, int64_t index_id, int64_t tablet_id,
-                                  RowsetId rowset_id, int32_t segment_id, int32_t schema_hash) {
+void StreamSinkFileWriter::init(PUniqueId load_id, int64_t index_id, int64_t tablet_id,
+                                int32_t segment_id, int32_t schema_hash) {
     LOG(INFO) << "init stream writer, load id(" << UniqueId(load_id).to_string() << "), index id("
-              << index_id << "), tablet_id(" << tablet_id << "), rowset id("
-              << rowset_id.to_string() << "), segment_id(" << segment_id << "), schema_hash("
-              << schema_hash << ")";
+              << index_id << "), tablet_id(" << tablet_id << "), segment_id("
+              << segment_id << "), schema_hash(" << schema_hash << ")";
     _load_id = load_id;
     _index_id = index_id;
     _tablet_id = tablet_id;
-    _rowset_id = rowset_id;
     _segment_id = segment_id;
-
-    butil::IOBuf buf;
-    PStreamHeader header;
-    header.set_allocated_load_id(&_load_id);
-    header.set_index_id(_index_id);
-    header.set_tablet_id(_tablet_id);
-    header.set_rowset_id(_rowset_id.to_string());
-    header.set_segment_id(_segment_id);
-    header.set_opcode(PStreamHeader::OPEN_FILE);
-    header.set_tablet_schema_hash(schema_hash);
-    size_t header_len = header.ByteSizeLong();
-
-    buf.append(reinterpret_cast<uint8_t*>(&header_len), sizeof(header_len));
-    buf.append(header.SerializeAsString());
-    Status status = _stream_sender(buf);
-    header.release_load_id();
-    return status;
 }
 
 Status StreamSinkFileWriter::appendv(const OwnedSlice* data, size_t data_cnt) {
@@ -71,7 +52,6 @@ Status StreamSinkFileWriter::appendv(const OwnedSlice* data, size_t data_cnt) {
     header.set_allocated_load_id(&_load_id);
     header.set_index_id(_index_id);
     header.set_tablet_id(_tablet_id);
-    header.set_rowset_id(_rowset_id.to_string());
     header.set_segment_id(_segment_id);
     header.set_opcode(header.APPEND_DATA);
     size_t header_len = header.ByteSizeLong();
@@ -100,9 +80,7 @@ Status StreamSinkFileWriter::finalize() {
     header.set_allocated_load_id(&_load_id);
     header.set_index_id(_index_id);
     header.set_tablet_id(_tablet_id);
-    header.set_rowset_id(_rowset_id.to_string());
     header.set_segment_id(_segment_id);
-    header.set_opcode(header.CLOSE_FILE);
     size_t header_len = header.ByteSizeLong();
 
     LOG(INFO) << "segment_size: " << _bytes_appended;

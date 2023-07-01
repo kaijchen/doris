@@ -38,17 +38,12 @@ public:
     LoadStreamMgr() = default;
     ~LoadStreamMgr() = default;
 
-    LoadStreamSharedPtr find_or_create_load(PUniqueId loadid, size_t num_senders);
+    LoadStreamSharedPtr try_open_load_stream(PUniqueId loadid, size_t num_senders);
     void clear_load(PUniqueId loadid);
-    Status bind_stream_to_load(LoadStreamSharedPtr loadstream, std::shared_ptr<StreamId> streamid);
-    Status unbind_stream_to_load(LoadStreamSharedPtr loadstream);
-    StreamIdPtr get_free_stream_id();
 
 private:
-    std::map<std::string, LoadStreamSharedPtr> _load_streams;
-    std::mutex _load_streams_lock;
-    std::map<LoadStreamSharedPtr, std::shared_ptr<StreamId>> _load_stream_to_streamid;
-    std::mutex _load_stream_to_streamid_lock;
+    bthread::Mutex _lock;
+    std::unordered_map<std::string, LoadStreamSharedPtr> _load_streams_map;
 };
 
 } // namespace doris

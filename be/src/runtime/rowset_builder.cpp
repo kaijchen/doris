@@ -73,13 +73,13 @@ RowsetBuilder::RowsetBuilder(BuildContext* context, const UniqueId& load_id)
           _cur_rowset(nullptr),
           _rowset_writer(nullptr),
           _tablet_schema(new TabletSchema),
-          _delta_written_success(false),
           _storage_engine(StorageEngine::instance()),
-          _load_id(load_id) {
+          _load_id(load_id),
+          _success(false) {
 }
 
 RowsetBuilder::~RowsetBuilder() {
-    if (_is_init && !_delta_written_success) {
+    if (_is_init && !_success) {
         _garbage_collection();
     }
 
@@ -170,7 +170,7 @@ Status RowsetBuilder::init() {
     return Status::OK();
 }
 
-Status RowsetBuilder::append_data(uint32_t segid, butil::IOBuf& buf) {
+Status RowsetBuilder::append_data(uint32_t segid, butil::IOBuf buf) {
     // phmap
     (void) segid;
     (void) buf;
@@ -202,22 +202,6 @@ Status RowsetBuilder::close() {
         RETURN_IF_ERROR(init());
     }
 
-    if (_is_cancelled) {
-        return _cancel_status;
-    }
-
-    if (_is_closed) {
-        LOG(WARNING) << "close after closed tablet_id=" << _context.tablet_id
-                     << " load_id=" << _context.load_id << " txn_id=" << _context.txn_id;
-        return Status::OK();
-    }
-
-    _is_closed = true;
-    return Status::OK();
-}
-
-Status RowsetBuilder::close_wait() {
-    std::lock_guard<std::mutex> l(_lock);
     DCHECK(_is_init)
             << "delta writer is supposed be to initialized before close_wait() being called";
 
@@ -271,9 +255,8 @@ Status RowsetBuilder::close_wait() {
                 _context.partition_id, _context.txn_id, _tablet->tablet_id(), _tablet->schema_hash(),
                 _tablet->tablet_uid(), true, _delete_bitmap, _rowset_ids);
     }
-
-    _delta_written_success = true;
-
+    _is_closed = true;
+    _success = true;
     return Status::OK();
 }
 

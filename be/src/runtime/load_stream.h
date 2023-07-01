@@ -33,96 +33,65 @@
 
 namespace doris {
 
-// locate a rowset
-struct TargetRowset {
-    brpc::StreamId streamid;
-    // UniqueId loadid; // TODO: remove it here and sink side
-    int64_t indexid;
-    int64_t tabletid;
-    RowsetId rowsetid; // TODO probably not needed
+class TabletStream {
+public:
+    TabletStream(int64_t id);
+    void append_data(uint32_t segid, bool eos, butil::IOBuf* data);
+    Status close();
+    int64_t id() { return _id; }
 
-    std::string to_string();
+private:
+    int64_t _id;
+    RowsetBuilderSharedPtr _rowset_builder;
+    std::vector<ThreadPoolToken> _flush_tokens;
 };
-using TargetRowsetPtr = std::shared_ptr<TargetRowset>;
-struct TargetRowsetComparator {
-    bool operator()(const TargetRowsetPtr& lhs, const TargetRowsetPtr& rhs) const;
-};
-
-// locate a segment file
-struct TargetSegment {
-    TargetRowsetPtr target_rowset;
-    int64_t segmentid;
-    int64_t backendid;
-
-    std::string to_string();
-};
-using TargetSegmentPtr = std::shared_ptr<TargetSegment>;
-struct TargetSegmentComparator {
-    bool operator()(const TargetSegmentPtr& lhs, const TargetSegmentPtr& rhs) const;
-};
+using TabletStreamSharedPtr = std::shared_ptr<TabletStream>;
 
 class IndexStream {
 public:
-    IndexStream(int64_t indexid): _indexid(indexid) {}
+    IndexStream(int64_t id): _id(id) {}
 
-    RowsetBuilderPtr find_or_create_rowset_builder(int64_t tablet_id);
+    void append_data(int64_t tablet_id, uint32_t segid, bool eos, butil::IOBuf* data);
 
-    Status close(uint32_t sender_id);
-
-    int64_t index_id() { return _indexid; }
+    void flush(uint32_t sender_id);
+    void close(std::vector<int64_t>* success_tablet_ids, std::vector<int64_t>* failed_tablet_ids);
 
 private:
-    int64_t _indexid;
-    std::map<int64_t /*tabletid*/, RowsetBuilderPtr> _rowset_builder_map;
-
+    int64_t _id;
+    std::unordered_map<int64_t /*tabletid*/, TabletStreamSharedPtr> _tablet_streams_map;
+    bthread::Mutex _lock;
 };
-using IndexStreamPtr = std::shared_ptr<IndexStream>;
+using IndexStreamSharedPtr = std::shared_ptr<IndexStream>;
 
 class LoadStream : public StreamInputHandler {
 public:
-    LoadStream();
+    LoadStream(PUniqueId load_id, uint32_t num_senders);
     ~LoadStream();
 
+    uint32_t add_rpc_stream() { return ++_num_rpc_streams; }
+    uint32_t remove_rpc_stream() { return --_num_rpc_streams; }
+
+    void close(uint32_t sender_id, std::vector<int64_t>* success_tablet_ids,
+               std::vector<int64_t>* failed_tablet_ids);
+
+    // callbacks called by brpc
     int on_received_messages(StreamId id, butil::IOBuf* const messages[], size_t size) override;
     void on_idle_timeout(StreamId id) override;
     void on_closed(StreamId id) override;
 
-    IndexStreamPtr find_or_create_index_stream(uint64_t indexid);
-
 private:
-    void _handle_message(StreamId stream, PStreamHeader hdr,
-                         TargetRowsetPtr target_rowset,
-                         TargetSegmentPtr target_segment,
-                         IndexStreamPtr index_stream,
-                         RowsetBuilderPtr rowset_builder,
-                         std::shared_ptr<butil::IOBuf> message);
     void _parse_header(butil::IOBuf* const message, PStreamHeader& hdr);
-    Status _create_and_open_file(TargetSegmentPtr target_segment, std::string path);
-    Status _append_data(TargetSegmentPtr target_segment, std::shared_ptr<butil::IOBuf> message);
-    Status _close_file(TargetSegmentPtr target_segment);
-    void _report_status(StreamId stream, TargetRowsetPtr target_rowset, bool is_success,
-                        std::string error_msg);
-    uint64_t get_next_segmentid(TargetRowsetPtr target_rowset);
-    uint64_t get_next_segmentid(TargetRowsetPtr target_rowset, int64_t segmentid,
-                                int64_t backendid);
-    Status _build_rowset(TargetRowsetPtr target_rowset, const RowsetMetaPB& rowset_meta);
-
+    void _append_data(int64_t index_id, int64_t tablet_id, uint32_t segid, bool eos, butil::IOBuf* data);
+    void _report_result(StreamId stream, std::vector<int64_t>* success_tablet_ids,
+                         std::vector<int64_t>* failed_tablet_ids);
+ 
 private:
-    std::unique_ptr<ThreadPool> _workers;
-    std::map<TargetSegmentPtr, std::shared_ptr<io::LocalFileWriter>, TargetSegmentComparator>
-            _file_map;
-    std::mutex _file_map_lock;
-    std::map<TargetRowsetPtr, size_t, TargetRowsetComparator> _tablet_segment_next_id;
-    std::mutex _tablet_segment_next_id_lock;
-    std::map<TargetSegmentPtr, int64_t, TargetSegmentComparator> _tablet_segment_pos;
-    int64_t _current_id = 0;
-    std::map<TargetSegmentPtr, std::shared_ptr<ThreadPoolToken>, TargetSegmentComparator>
-            _segment_token_map; // accessed in single thread, safe
-    std::mutex _segment_token_map_lock;
-    std::map<TargetSegmentPtr, TargetSegmentPtr, TargetSegmentComparator>
-            _rawsegment_finalsegment_map;
-    std::mutex _rawsegment_finalsegment_map_lock;
-    std::map<int64_t /*indexid*/, IndexStreamPtr> _index_stream_map;
+    PUniqueId _id;
+    std::unordered_map<int64_t, IndexStreamSharedPtr> _index_streams_map;
+    std::atomic<uint32_t> _num_rpc_streams;
+    std::vector<bool> _senders_status;
+    uint32_t _num_working_senders;
+    bthread::Mutex _lock;
 };
 
 using LoadStreamSharedPtr = std::shared_ptr<LoadStream>;
