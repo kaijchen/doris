@@ -22,6 +22,7 @@
 #include "util/mem_info.h"
 #include "util/metrics.h"
 
+
 namespace doris {
 DEFINE_GAUGE_METRIC_PROTOTYPE_5ARG(tablet_sink_v2_mem_consumption, MetricUnit::BYTES, "",
                                    tablet_sink_v2_mem_consumption, Labels({{"type", "load"}}));
@@ -56,12 +57,12 @@ Status VOlapTableSinkV2Mgr::init(int64_t process_mem_limit) {
     return Status::OK();
 }
 
-void VOlapTableSinkV2Mgr::register_writer(std::shared_ptr<DeltaWriter> writer) {
+void VOlapTableSinkV2Mgr::register_writer(std::shared_ptr<DeltaWriterV2> writer) {
     std::lock_guard<std::mutex> l(_lock);
     _writers.insert(writer);
 }
 
-void VOlapTableSinkV2Mgr::deregister_writer(std::shared_ptr<DeltaWriter> writer) {
+void VOlapTableSinkV2Mgr::deregister_writer(std::shared_ptr<DeltaWriterV2> writer) {
     std::lock_guard<std::mutex> l(_lock);
     _writers.erase(writer);
 }
@@ -84,8 +85,8 @@ void VOlapTableSinkV2Mgr::handle_memtable_flush() {
 #endif
     // Indicate whether current thread is reducing mem on hard limit.
     bool reducing_mem_on_hard_limit = false;
-    // tuple<DeltaWriter, mem_size>
-    std::vector<std::tuple<std::shared_ptr<DeltaWriter>, int64_t>> writers_to_reduce_mem;
+    // tuple<DeltaWriterV2, mem_size>
+    std::vector<std::tuple<std::shared_ptr<DeltaWriterV2>, int64_t>> writers_to_reduce_mem;
     {
         MonotonicStopWatch timer;
         timer.start();
@@ -105,8 +106,8 @@ void VOlapTableSinkV2Mgr::handle_memtable_flush() {
             return;
         }
 #endif
-        // tuple<DeltaWriter, mem size>
-        using WriterMemItem = std::tuple<std::shared_ptr<DeltaWriter>, int64_t>;
+        // tuple<DeltaWriterV2, mem size>
+        using WriterMemItem = std::tuple<std::shared_ptr<DeltaWriterV2>, int64_t>;
         auto cmp = [](WriterMemItem& lhs, WriterMemItem& rhs) {
             return std::get<1>(lhs) > std::get<1>(rhs);
         };
@@ -199,7 +200,7 @@ void VOlapTableSinkV2Mgr::handle_memtable_flush() {
 void VOlapTableSinkV2Mgr::_refresh_mem_tracker() {
     int64_t mem_usage = 0;
     for (auto& writer : _writers) {
-        mem_usage += writer->mem_consumption(MemType::ALL);
+        mem_usage += writer->mem_consumption(doris::DeltaWriterV2::MemType::ALL);
     }
     THREAD_MEM_TRACKER_TRANSFER_TO(mem_usage - _mem_tracker->consumption(), _mem_tracker.get());
 }

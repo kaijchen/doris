@@ -71,8 +71,11 @@ void TabletStream::append_data(uint32_t sender_id, uint32_t segid, bool eos, but
     uint32_t new_segid = _segids_mapping[sender_id][segid];
     DCHECK(new_segid != std::numeric_limits<uint32_t>::max());
     butil::IOBuf buf = data->movable();
-    auto flush_func = [this, new_segid, buf]() {
+    auto flush_func = [this, new_segid, eos, buf]() {
          _rowset_builder->append_data(new_segid, buf);
+         if (eos) {
+             _rowset_builder->close_segment(new_segid);
+         }
     };
     _flush_tokens[segid % _flush_tokens.size()]->submit_func(flush_func);
 }

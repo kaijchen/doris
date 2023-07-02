@@ -45,7 +45,7 @@ static const uint32_t MAX_PATH_LEN = 1024;
 StorageEngine* z_engine = nullptr;
 static const std::string zTestDir = "./data_test/data/sink_stream_mgr_test";
 
-class SinkStreamMgrTest : public testing::Test {
+class LoadStreamMgrTest : public testing::Test {
 public:
     class Handler : public StreamInputHandler {
     public:
@@ -144,12 +144,10 @@ public:
         Handler _handler;
     };
 
-    SinkStreamMgrTest() = default;
+    LoadStreamMgrTest() = default;
 
     void SetUp() override {
         srand(time(nullptr));
-        config::sink_stream_pool_thread_num_min = 20;
-        config::sink_stream_pool_thread_num_max = 20;
         char buffer[MAX_PATH_LEN];
         EXPECT_NE(getcwd(buffer, MAX_PATH_LEN), nullptr);
         config::storage_root_path = std::string(buffer) + "/data_test";
@@ -168,7 +166,7 @@ public:
 
         _env = doris::ExecEnv::GetInstance();
         _env->set_storage_engine(z_engine);
-        _env->_sink_stream_mgr = new SinkStreamMgr();
+        _env->_load_stream_mgr = new LoadStreamMgr();
 
         EXPECT_TRUE(io::global_local_filesystem()->create_directory(zTestDir).ok());
 
@@ -197,8 +195,8 @@ public:
     PInternalServiceImpl* _internal_service;
 };
 
-TEST_F(SinkStreamMgrTest, open_append_close_file_twice) {
-    //SinkStreamMgr* stream_mgr = _env.get_sink_stream_mgr();
+TEST_F(LoadStreamMgrTest, open_append_close_file_twice) {
+    //LoadStreamMgr* stream_mgr = _env.get_sink_stream_mgr();
     //StreamIdPtr stream = stream_mgr->get_free_stream_id();
 
     MockSinkClient client;
@@ -209,32 +207,6 @@ TEST_F(SinkStreamMgrTest, open_append_close_file_twice) {
 
     std::stringstream path1;
     path1 << zTestDir << "/" << std::to_string(1047);
-
-    /************** OPEN FILE **************/
-    {
-        std::cerr << "openfile" << std::endl;
-        butil::IOBuf open_buf;
-        PStreamHeader header;
-        header.set_opcode(PStreamHeader::OPEN_FILE);
-        std::shared_ptr<PUniqueId> loadid = std::make_shared<PUniqueId>();
-        loadid->set_hi(1);
-        loadid->set_lo(1);
-        header.set_allocated_load_id(loadid.get());
-        header.set_index_id(2);
-        header.set_tablet_id(3);
-        header.set_segment_id(4);
-        header.set_tablet_schema_hash(5);
-        header.set_rowset_id("6");
-        size_t hdr_len = header.ByteSizeLong();
-        std::cerr << "on client side: hdr_len = " << hdr_len << std::endl;
-        open_buf.append((char*)&hdr_len, sizeof(size_t));
-        open_buf.append(header.SerializeAsString());
-        open_buf.append(path1.str());
-        client.send(&open_buf);
-        sleep(2);
-        header.release_load_id();
-        CHECK_EQ(true, std::filesystem::exists(path1.str()));
-    }
 
     /************* APPEND FILE *************/
     {
@@ -262,7 +234,7 @@ TEST_F(SinkStreamMgrTest, open_append_close_file_twice) {
     {
         butil::IOBuf close_buf;
         PStreamHeader header;
-        header.set_opcode(PStreamHeader::CLOSE_FILE);
+        header.set_opcode(PStreamHeader::APPEND_DATA);
         std::shared_ptr<PUniqueId> loadid = std::make_shared<PUniqueId>();
         loadid->set_hi(1);
         loadid->set_lo(1);
@@ -270,6 +242,7 @@ TEST_F(SinkStreamMgrTest, open_append_close_file_twice) {
         header.set_index_id(2);
         header.set_tablet_id(3);
         header.set_segment_id(4);
+        header.set_segment_eos(true);
         size_t hdr_len = header.ByteSizeLong();
         close_buf.append((char*)&hdr_len, sizeof(size_t));
         close_buf.append(header.SerializeAsString());
@@ -400,7 +373,7 @@ TEST_F(SinkStreamMgrTest, open_append_close_file_twice) {
     client.disconnect();
 }
 
-TEST_F(SinkStreamMgrTest, get_next_segment_id) {
+TEST_F(LoadStreamMgrTest, get_next_segment_id) {
     PUniqueId loadid;
     loadid.set_hi(1);
     loadid.set_lo(1);
@@ -413,7 +386,7 @@ TEST_F(SinkStreamMgrTest, get_next_segment_id) {
     target_rowset->tabletid = 1;
     target_rowset->rowsetid = rowsetid;
 
-    SinkStreamHandler handler;
+    LoadStreamHandler handler;
 
     //test order
     CHECK_EQ(0, handler.get_next_segmentid(target_rowset, 0, 1));

@@ -106,7 +106,6 @@ void DeltaWriterV2::_init_profile(RuntimeProfile* profile) {
 }
 
 DeltaWriterV2::~DeltaWriterV2() {
-
     if (!_is_init) {
         return;
     }

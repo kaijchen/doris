@@ -531,6 +531,7 @@ void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
                 }
             }
             DeltaWriterV2::open(&wrequest, &delta_writer, sink->_profile, sink->_load_id);
+            // sink->_table_sink_v2_mgr->register_writer(std::shared_ptr<DeltaWriterV2>(delta_writer));
             for (auto stream : ctx->streams) {
                 delta_writer->add_stream(stream);
             }
@@ -543,6 +544,7 @@ void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
             delta_writer = it->second.get();
         }
     }
+    // sink->_table_sink_v2_mgr->handle_memtable_flush();
     auto st = delta_writer->write(ctx->block.get(), ctx->row_idxes, false);
     auto cnt = sink->_flying_task_count.fetch_sub(1) - 1;
     DLOG(INFO) << "Finished writing Tablet(tablet id: " << ctx->tablet_id
@@ -582,6 +584,7 @@ Status VOlapTableSinkV2::close(RuntimeState* state, Status exec_status) {
         // close all delta writers
         if (_delta_writer_for_tablet.use_count() == 1) {
             for (const auto& entry : *_delta_writer_for_tablet) {
+
                 entry.second->close();
             }
             for (const auto& entry : *_delta_writer_for_tablet) {
