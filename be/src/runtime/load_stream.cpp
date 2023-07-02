@@ -30,18 +30,49 @@
 
 namespace doris {
 
-TabletStream::TabletStream(int64_t id) : _id(id) {
-    // TODO: init flush token
+TabletStream::TabletStream(int64_t id, uint32_t  num_senders)
+        : _id(id), _next_segid(0) {
     for (int i = 0; i < 10; i++) {
         _flush_tokens.emplace_back(ExecEnv::GetInstance()->get_load_stream_mgr()->new_token());
     }
+
+    _segids_mapping.resize(num_senders);
 }
 
-void TabletStream::append_data(uint32_t segid, bool eos, butil::IOBuf* data) {
-    // TODO: segid
+void TabletStream::append_data(uint32_t sender_id, uint32_t segid, bool eos, butil::IOBuf* data) {
+    // We don't need a lock protecting _segids_mapping, because it is written once.
+    if(sender_id >= _segids_mapping.size()) {
+        LOG(WARNING) << "sender id is out of range, sender_id=" << sender_id << ", num_senders="
+                     << _segids_mapping.size();
+        std::lock_guard lock_guard(_lock);
+        _failed_st = Status::Error<ErrorCode::INVALID_ARGUMENT>("sender id is out of range {}/{}",
+                                                                sender_id,
+                                                                _segids_mapping.size());
+        return;
+    }
+
+    // Ensure there are enough space and mapping are built.
+    if (segid + 1 > _segids_mapping[sender_id].size()) {
+        // TODO: Each sender lock is enough.
+        std::lock_guard lock_guard(_lock);
+        ssize_t origin_size = _segids_mapping[sender_id].size();
+        if (segid + 1 > origin_size) {
+            _segids_mapping[sender_id].resize(segid + 1, std::numeric_limits<uint32_t>::max());
+            // handle concurrency.
+            for (ssize_t index = origin_size; index <= segid; index++) {
+                _segids_mapping[sender_id][index] = _next_segid;
+                _next_segid++;
+            }
+        }
+    }
+
+    // Each sender sends data in one segment sequential, so we also does not
+    // need a lock here.
+    uint32_t new_segid = _segids_mapping[sender_id][segid];
+    DCHECK(new_segid != std::numeric_limits<uint32_t>::max());
     butil::IOBuf buf = data->movable();
-    auto flush_func = [this, segid, buf]() {
-         _rowset_builder->append_data(segid, buf);
+    auto flush_func = [this, new_segid, buf]() {
+         _rowset_builder->append_data(new_segid, buf);
     };
     _flush_tokens[segid % _flush_tokens.size()]->submit_func(flush_func);
 }
@@ -53,13 +84,13 @@ Status TabletStream::close() {
     return _rowset_builder->close();
 }
 
-void IndexStream::append_data(int64_t tablet_id, uint32_t segid, bool eos, butil::IOBuf* data) {
+void IndexStream::append_data(uint32_t sender_id, int64_t tablet_id, uint32_t segid, bool eos, butil::IOBuf* data) {
     TabletStreamSharedPtr tablet_stream;
     {
         std::lock_guard lock_guard(_lock);
         auto it = _tablet_streams_map.find(tablet_id);
         if (it == _tablet_streams_map.end()) {
-            tablet_stream = std::make_shared<TabletStream>(tablet_id);
+            tablet_stream = std::make_shared<TabletStream>(tablet_id, _num_senders);
             _tablet_streams_map[tablet_id] = tablet_stream;
         } else {
             tablet_stream = it->second;
@@ -67,7 +98,7 @@ void IndexStream::append_data(int64_t tablet_id, uint32_t segid, bool eos, butil
     }
 
     // TODO: segid
-    tablet_stream->append_data(segid, eos, data);
+    tablet_stream->append_data(sender_id, segid, eos, data);
 }
 
 void IndexStream::close(std::vector<int64_t>* success_tablet_ids,
@@ -85,7 +116,7 @@ void IndexStream::close(std::vector<int64_t>* success_tablet_ids,
 
 
 LoadStream::LoadStream(PUniqueId load_id, uint32_t num_senders)
-        : _id(load_id), _num_working_senders(num_senders) {
+        : _id(load_id), _num_working_senders(num_senders), _num_senders(num_senders) {
     _senders_status.resize(num_senders, true);
 }
 
@@ -142,21 +173,21 @@ void LoadStream::_parse_header(butil::IOBuf* const message, PStreamHeader& hdr) 
               << ", schema_hash = " << hdr.tablet_schema_hash();
 }
 
-void LoadStream::_append_data(int64_t index_id, int64_t tablet_id, uint32_t segid,
+void LoadStream::_append_data(uint32_t sender_id, int64_t index_id, int64_t tablet_id, uint32_t segid,
                               bool eos, butil::IOBuf* data) {
     IndexStreamSharedPtr index_stream;
     {
         std::lock_guard lock_guard(_lock);
         auto it = _index_streams_map.find(index_id);
         if (it == _index_streams_map.end()) {
-            index_stream = std::make_shared<IndexStream>(index_id);
+            index_stream = std::make_shared<IndexStream>(index_id, _num_senders);
             _index_streams_map[index_id] = index_stream;
         } else {
             index_stream = it->second;
         }
     }
 
-    index_stream->append_data(tablet_id, segid, eos, data);
+    index_stream->append_data(sender_id, tablet_id, segid, eos, data);
 }
 
 //TODO trigger build meta when last segment of all cluster is closed
@@ -175,7 +206,7 @@ int LoadStream::on_received_messages(StreamId id, butil::IOBuf* const messages[]
         // step 2: dispatch
         switch (hdr.opcode()) {
         case PStreamHeader::APPEND_DATA:
-            _append_data(hdr.index_id(), hdr.tablet_id(), hdr.segment_id(), hdr.segment_eos(), messages[i]);
+            _append_data(hdr.sender_id(), hdr.index_id(), hdr.tablet_id(), hdr.segment_id(), hdr.segment_eos(), messages[i]);
             break;
         case PStreamHeader::CLOSE_LOAD:
             {

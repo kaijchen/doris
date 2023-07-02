@@ -32,10 +32,12 @@
 
 namespace doris {
 
+// origin_segid(index) -> new_segid(value in vector)
+using SegIdMapping = std::vector<uint32_t>;
 class TabletStream {
 public:
-    TabletStream(int64_t id);
-    void append_data(uint32_t segid, bool eos, butil::IOBuf* data);
+    TabletStream(int64_t id, uint32_t num_senders);
+    void append_data(uint32_t sender_id, uint32_t segid, bool eos, butil::IOBuf* data);
     Status close();
     int64_t id() { return _id; }
 
@@ -43,20 +45,25 @@ private:
     int64_t _id;
     RowsetBuilderSharedPtr _rowset_builder;
     std::vector<std::unique_ptr<ThreadPoolToken>> _flush_tokens;
+    std::vector<SegIdMapping> _segids_mapping;
+    std::atomic<uint32_t> _next_segid;
+    bthread::Mutex _lock;
+    Status _failed_st;
 };
 using TabletStreamSharedPtr = std::shared_ptr<TabletStream>;
 
 class IndexStream {
 public:
-    IndexStream(int64_t id): _id(id) {}
+    IndexStream(int64_t id, uint32_t num_senders): _id(id), _num_senders(num_senders) {}
 
-    void append_data(int64_t tablet_id, uint32_t segid, bool eos, butil::IOBuf* data);
+    void append_data(uint32_t sender_id, int64_t tablet_id, uint32_t segid, bool eos, butil::IOBuf* data);
 
     void flush(uint32_t sender_id);
     void close(std::vector<int64_t>* success_tablet_ids, std::vector<int64_t>* failed_tablet_ids);
 
 private:
     int64_t _id;
+    uint32_t _num_senders;
     std::unordered_map<int64_t /*tabletid*/, TabletStreamSharedPtr> _tablet_streams_map;
     bthread::Mutex _lock;
 };
@@ -81,7 +88,7 @@ public:
 
 private:
     void _parse_header(butil::IOBuf* const message, PStreamHeader& hdr);
-    void _append_data(int64_t index_id, int64_t tablet_id, uint32_t segid, bool eos, butil::IOBuf* data);
+    void _append_data(uint32_t sender_id, int64_t index_id, int64_t tablet_id, uint32_t segid, bool eos, butil::IOBuf* data);
     void _report_result(StreamId stream, std::vector<int64_t>* success_tablet_ids,
                          std::vector<int64_t>* failed_tablet_ids);
  
@@ -92,6 +99,7 @@ private:
     std::vector<bool> _senders_status;
     uint32_t _num_working_senders;
     bthread::Mutex _lock;
+    uint32_t _num_senders;
 };
 
 using LoadStreamSharedPtr = std::shared_ptr<LoadStream>;
