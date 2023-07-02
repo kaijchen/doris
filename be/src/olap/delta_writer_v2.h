@@ -29,6 +29,8 @@
 #include <unordered_set>
 #include <vector>
 
+#include <brpc/stream.h>
+
 #include "common/status.h"
 #include "olap/memtable.h"
 #include "olap/olap_common.h"

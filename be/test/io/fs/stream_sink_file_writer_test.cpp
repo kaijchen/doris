@@ -152,9 +152,7 @@ TEST_F(StreamSinkFileWriterTest, TestInit) {
     PUniqueId load_id;
     load_id.set_hi(1);
     load_id.set_lo(1);
-    RowsetId rowset_id;
-    rowset_id.init("1");
-    CHECK_STATUS_OK(writer.init(load_id, 1, 1, rowset_id, 1, 123));
+    writer.init(load_id, 1, 1, 1, 123);
 }
 
 TEST_F(StreamSinkFileWriterTest, TestAppend) {
@@ -162,9 +160,7 @@ TEST_F(StreamSinkFileWriterTest, TestAppend) {
     PUniqueId load_id;
     load_id.set_hi(1);
     load_id.set_lo(1);
-    RowsetId rowset_id;
-    rowset_id.init("1");
-    CHECK_STATUS_OK(writer.init(load_id, 1, 1, rowset_id, 1, 123));
+    writer.init(load_id, 1, 1, 1, 123);
     std::vector<OwnedSlice> slices;
     faststring str;
     str.assign_copy("hello");
@@ -177,9 +173,7 @@ TEST_F(StreamSinkFileWriterTest, TestFinalize) {
     PUniqueId load_id;
     load_id.set_hi(1);
     load_id.set_lo(1);
-    RowsetId rowset_id;
-    rowset_id.init("1");
-    CHECK_STATUS_OK(writer.init(load_id, 1, 1, rowset_id, 1, 123));
+    writer.init(load_id, 1, 1, 1, 123);
     CHECK_STATUS_OK(writer.finalize());
 }
 

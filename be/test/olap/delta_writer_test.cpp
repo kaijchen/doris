@@ -462,7 +462,7 @@ TEST_F(TestDeltaWriter, open) {
     PUniqueId load_id;
     load_id.set_hi(0);
     load_id.set_lo(0);
-    WriteRequest write_req = {10003,   270068375,  WriteType::LOAD,      20001, 30001,
+    WriteRequest write_req = {10003,   270068375,  20001, 30001,
                               load_id, tuple_desc, &tuple_desc->slots(), true,  &param};
     DeltaWriter* delta_writer = nullptr;
 
@@ -498,7 +498,7 @@ TEST_F(TestDeltaWriter, vec_write) {
     PUniqueId load_id;
     load_id.set_hi(0);
     load_id.set_lo(0);
-    WriteRequest write_req = {10004,   270068376,  WriteType::LOAD,        20002, 30002,
+    WriteRequest write_req = {10004,   270068376,  20002, 30002,
                               load_id, tuple_desc, &(tuple_desc->slots()), false, &param};
     DeltaWriter* delta_writer = nullptr;
     std::unique_ptr<RuntimeProfile> profile;
@@ -646,7 +646,7 @@ TEST_F(TestDeltaWriter, vec_sequence_col) {
     PUniqueId load_id;
     load_id.set_hi(0);
     load_id.set_lo(0);
-    WriteRequest write_req = {10005,   270068377,  WriteType::LOAD,        20003, 30003,
+    WriteRequest write_req = {10005,   270068377,  20003, 30003,
                               load_id, tuple_desc, &(tuple_desc->slots()), false, &param};
     DeltaWriter* delta_writer = nullptr;
     std::unique_ptr<RuntimeProfile> profile;

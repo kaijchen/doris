@@ -15,8 +15,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/sink_stream_mgr.h"
-
 #include <brpc/channel.h>
 #include <brpc/server.h>
 #include <brpc/stream.h>
@@ -38,16 +36,19 @@
 #include "gen_cpp/FrontendService_types.h"
 #include "gtest/gtest_pred_impl.h"
 #include "runtime/exec_env.h"
+#include "runtime/load_stream_mgr.h"
+
+using namespace brpc;
 
 namespace doris {
 
 static const uint32_t MAX_PATH_LEN = 1024;
 StorageEngine* z_engine = nullptr;
-static const std::string zTestDir = "./data_test/data/sink_stream_mgr_test";
+static const std::string zTestDir = "./data_test/data/load_stream_mgr_test";
 
 class LoadStreamMgrTest : public testing::Test {
 public:
-    class Handler : public StreamInputHandler {
+    class Handler : public brpc::StreamInputHandler {
     public:
         int on_received_messages(StreamId id, butil::IOBuf* const messages[],
                                  size_t size) override {
@@ -166,7 +167,7 @@ public:
 
         _env = doris::ExecEnv::GetInstance();
         _env->set_storage_engine(z_engine);
-        _env->_load_stream_mgr = new LoadStreamMgr();
+        _env->_load_stream_mgr = new LoadStreamMgr(4);
 
         EXPECT_TRUE(io::global_local_filesystem()->create_directory(zTestDir).ok());
 
@@ -276,7 +277,6 @@ TEST_F(LoadStreamMgrTest, open_append_close_file_twice) {
         header.set_tablet_id(3);
         header.set_segment_id(5);
         header.set_tablet_schema_hash(5);
-        header.set_rowset_id("6");
         size_t hdr_len = header.ByteSizeLong();
         std::cerr << "on client side: hdr_len = " << hdr_len << std::endl;
         open_buf.append((char*)&hdr_len, sizeof(size_t));
@@ -314,7 +314,7 @@ TEST_F(LoadStreamMgrTest, open_append_close_file_twice) {
     {
         butil::IOBuf close_buf;
         PStreamHeader header;
-        header.set_opcode(PStreamHeader::CLOSE_FILE);
+        header.set_opcode(PStreamHeader::APPEND_DATA);
         std::shared_ptr<PUniqueId> loadid = std::make_shared<PUniqueId>();
         loadid->set_hi(1);
         loadid->set_lo(1);
@@ -322,6 +322,7 @@ TEST_F(LoadStreamMgrTest, open_append_close_file_twice) {
         header.set_index_id(2);
         header.set_tablet_id(3);
         header.set_segment_id(5);
+        header.set_segment_eos(true);
         size_t hdr_len = header.ByteSizeLong();
         close_buf.append((char*)&hdr_len, sizeof(size_t));
         close_buf.append(header.SerializeAsString());
@@ -337,69 +338,8 @@ TEST_F(LoadStreamMgrTest, open_append_close_file_twice) {
         // CHECK
     }
 
-    /****************************************/
-    /**** DO IT AGAIN (AS LAST SEGMENT)  ****/
-    /****************************************/
-    std::stringstream path3;
-    path3 << zTestDir << "/" << std::to_string(1049);
-
-    /************* CLOSE STREAM **************/
-    {
-        butil::IOBuf close_buf;
-        PStreamHeader header;
-        header.set_opcode(PStreamHeader::CLOSE_STREAM);
-        std::shared_ptr<PUniqueId> loadid = std::make_shared<PUniqueId>();
-        loadid->set_hi(1);
-        loadid->set_lo(1);
-        header.set_allocated_load_id(loadid.get());
-        header.set_index_id(2);
-        header.set_tablet_id(3);
-        header.set_tablet_schema_hash(5);
-        // no segment id, but require rowset_meta
-        header.set_allocated_rowset_meta(new RowsetMetaPB());
-        int64_t rowset_id = 1;
-        header.mutable_rowset_meta()->set_rowset_id(rowset_id);
-        size_t hdr_len = header.ByteSizeLong();
-        close_buf.append((char*)&hdr_len, sizeof(size_t));
-        close_buf.append(header.SerializeAsString());
-        client.send(&close_buf);
-        sleep(2);
-        header.release_load_id();
-        header.release_rowset_meta();
-        // CHECK
-    }
-
     sleep(2);
     client.disconnect();
-}
-
-TEST_F(LoadStreamMgrTest, get_next_segment_id) {
-    PUniqueId loadid;
-    loadid.set_hi(1);
-    loadid.set_lo(1);
-    RowsetId rowsetid;
-    rowsetid.init(1);
-
-    TargetRowsetPtr target_rowset = std::make_shared<TargetRowset>();
-    target_rowset->indexid = 1;
-    target_rowset->loadid = loadid;
-    target_rowset->tabletid = 1;
-    target_rowset->rowsetid = rowsetid;
-
-    LoadStreamHandler handler;
-
-    //test order
-    CHECK_EQ(0, handler.get_next_segmentid(target_rowset, 0, 1));
-    CHECK_EQ(1, handler.get_next_segmentid(target_rowset, 1, 1));
-    // test disorder
-    CHECK_EQ(4, handler.get_next_segmentid(target_rowset, 4, 1));
-    CHECK_EQ(2, handler.get_next_segmentid(target_rowset, 2, 1));
-    // test multiple be concurrent writes
-    CHECK_EQ(6, handler.get_next_segmentid(target_rowset, 1, 2));
-    CHECK_EQ(3, handler.get_next_segmentid(target_rowset, 3, 1));
-    CHECK_EQ(5, handler.get_next_segmentid(target_rowset, 0, 2));
-    CHECK_EQ(7, handler.get_next_segmentid(target_rowset, 2, 2));
-    CHECK_EQ(8, handler.get_next_segmentid(target_rowset, 3, 2));
 }
 
 } // namespace doris
