@@ -37,15 +37,15 @@ public:
     LoadStreamMgr(uint32_t segment_file_writer_thread_num);
     ~LoadStreamMgr();
 
-    LoadStreamSharedPtr try_open_load_stream(PUniqueId loadid, size_t num_senders);
-    void clear_load(PUniqueId loadid);
+    Status try_open_load_stream(const PTabletWriterOpenRequest* request, LoadStreamSharedPtr*);
+    void clear_load(UniqueId loadid);
     std::unique_ptr<ThreadPoolToken> new_token() {
         return _file_writer_thread_pool->new_token(ThreadPool::ExecutionMode::SERIAL);
     }
 
 private:
     bthread::Mutex _lock;
-    std::unordered_map<std::string, LoadStreamSharedPtr> _load_streams_map;
+    std::unordered_map<UniqueId, LoadStreamSharedPtr> _load_streams_map;
     std::unique_ptr<ThreadPool> _file_writer_thread_pool;
 };
 

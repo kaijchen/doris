@@ -171,13 +171,14 @@ Status RowsetBuilder::init() {
 }
 
 Status RowsetBuilder::append_data(uint32_t segid, butil::IOBuf buf) {
-    // phmap
+    DCHECK(_is_init);
     Status st;
 
     if (segid > _segment_file_writers.size() || _segment_file_writers[segid] == nullptr) {
         io::FileWriterPtr file_writer;
         st = _rowset_writer->create_file_writer(segid, &file_writer);
         if (!st.ok()) {
+            _is_canceled = true;
             return st;
         }
         _segment_file_writers[segid].reset(file_writer.release());
@@ -188,7 +189,11 @@ Status RowsetBuilder::append_data(uint32_t segid, butil::IOBuf buf) {
 }
 
 Status RowsetBuilder::close_segment(uint32_t segid) {
-    return _segment_file_writers[segid]->close();
+    auto st = _segment_file_writers[segid]->close();
+    if (!st.ok()) {
+        _is_canceled = true;
+    }
+    return st;
 }
 
 void RowsetBuilder::add_segments(std::vector<SegmentStatistics>& segstats) {
@@ -201,7 +206,7 @@ void RowsetBuilder::add_segments(std::vector<SegmentStatistics>& segstats) {
 
 Status RowsetBuilder::close() {
     std::lock_guard<std::mutex> l(_lock);
-    if (!_is_init && !_is_cancelled) {
+    if (!_is_init) {
         // if this delta writer is not initialized, but close() is called.
         // which means this tablet has no data loaded, but at least one tablet
         // in same partition has data loaded.
@@ -211,12 +216,11 @@ Status RowsetBuilder::close() {
     }
 
     DCHECK(_is_init)
-            << "delta writer is supposed be to initialized before close_wait() being called";
+            << "rowset builder is supposed be to initialized before close_wait() being called";
 
-    if (_is_cancelled) {
-        return _cancel_status;
+    if (_is_canceled) {
+        return Status::Error<ErrorCode::INTERNAL_ERROR>("flush segment failed");
     }
-
     /*
     if (_rowset_writer->num_rows() + _memtable_stat.merged_rows != _total_received_rows) {
         LOG(WARNING) << "the rows number written doesn't match, rowset num rows written to file: "
@@ -265,23 +269,6 @@ Status RowsetBuilder::close() {
     }
     _is_closed = true;
     _success = true;
-    return Status::OK();
-}
-
-Status RowsetBuilder::cancel() {
-    return cancel_with_status(Status::Cancelled("already cancelled"));
-}
-
-Status RowsetBuilder::cancel_with_status(const Status& st) {
-    std::lock_guard<std::mutex> l(_lock);
-    if (_is_cancelled) {
-        return Status::OK();
-    }
-    if (_rowset_writer && _rowset_writer->is_doing_segcompaction()) {
-        _rowset_writer->wait_flying_segcompaction(); /* already cancel, ignore the return status */
-    }
-    _is_cancelled = true;
-    _cancel_status = st;
     return Status::OK();
 }
 

@@ -295,10 +295,11 @@ Status VOlapTableSinkV2::_init_stream_pool(const NodeInfo& node_info, StreamPool
                   << node_info.host << ":" << node_info.brpc_port << ")";
         const auto& stub = _state->exec_env()->brpc_internal_client_cache()->get_client(
                 node_info.host, node_info.brpc_port);
-        POpenStreamSinkRequest request;
-        request.set_allocated_id(&_load_id);
+        PTabletWriterOpenRequest request;
+        /*request.set_allocated_id(&_load_id);
         request.set_tablet_id(_location->any_tablet_id());
         request.set_backend_id(node_info.id);
+        */
         POpenStreamSinkResponse response;
         stub->open_stream_sink(&cntl, &request, &response, nullptr);
         // TODO: this is a debug log

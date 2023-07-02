@@ -251,7 +251,7 @@ void PInternalServiceImpl::tablet_writer_open(google::protobuf::RpcController* c
 }
 
 void PInternalServiceImpl::open_stream_sink(google::protobuf::RpcController* controller,
-                                            const POpenStreamSinkRequest* request,
+                                            const PTabletWriterOpenRequest* request,
                                             POpenStreamSinkResponse* response,
                                             google::protobuf::Closure* done) {
     brpc::ClosureGuard done_guard(done);
@@ -278,12 +278,14 @@ void PInternalServiceImpl::open_stream_sink(google::protobuf::RpcController* con
     ExecEnv* env = ExecEnv::GetInstance();
 
     auto load_stream_mgr = env->get_load_stream_mgr();
-    auto load_stream = load_stream_mgr->try_open_load_stream(request->id(), request->num_senders());
+    LoadStreamSharedPtr load_stream;
+    auto st = load_stream_mgr->try_open_load_stream(request, &load_stream);
 
     stream_options.handler = load_stream.get();
+    // TODO : set idle timeout
+    // stream_options.idle_timeout_ms =
 
     StreamId streamid;
-
     if (brpc::StreamAccept(&streamid, *cntl, &stream_options) != 0) {
         cntl->SetFailed("Fail to accept stream");
         status->set_status_code(TStatusCode::CANCELLED);
@@ -291,6 +293,8 @@ void PInternalServiceImpl::open_stream_sink(google::protobuf::RpcController* con
         response->release_status();
         return;
     }
+
+    load_stream->add_rpc_stream();
     LOG(INFO) << "OOXXOO: get streamid =" << streamid;
 
     status->set_status_code(TStatusCode::OK);

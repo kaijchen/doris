@@ -80,11 +80,6 @@ public:
     // wait for all memtables to be flushed.
     Status close();
 
-    // abandon current memtable and wait for all pending-flushing memtables to be destructed.
-    // mem_consumption() should be 0 after this function returns.
-    Status cancel();
-    Status cancel_with_status(const Status& st);
-
     int64_t tablet_id() { return _tablet->tablet_id(); }
 
 private:
@@ -95,9 +90,8 @@ private:
                                       const TabletSchema& ori_tablet_schema);
 
     bool _is_init = false;
-    bool _is_cancelled = false;
     bool _is_closed = false;
-    Status _cancel_status;
+    bool _is_canceled = false;
     BuildContext _context;
     TabletSharedPtr _tablet;
     RowsetSharedPtr _cur_rowset;

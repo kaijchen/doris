@@ -41,28 +41,27 @@ LoadStreamMgr::~LoadStreamMgr() {
     _file_writer_thread_pool->shutdown();
 }
 
-LoadStreamSharedPtr LoadStreamMgr::try_open_load_stream(PUniqueId load_id, size_t num_senders) {
-    std::string load_id_str = load_id.SerializeAsString();
-    LoadStreamSharedPtr load_stream;
+Status LoadStreamMgr::try_open_load_stream(const PTabletWriterOpenRequest* request,
+                                           LoadStreamSharedPtr* load_stream) {
+    UniqueId load_id(request->id());
 
     {
         std::lock_guard l(_lock);
-        auto it = _load_streams_map.find(load_id_str);
+        auto it = _load_streams_map.find(load_id);
         if (it != _load_streams_map.end()) {
-            load_stream = it->second;
+            *load_stream = it->second;
         } else {
-            load_stream = std::make_shared<LoadStream>(load_id, num_senders);
-            _load_streams_map[load_id_str] = load_stream;
+            *load_stream = std::make_shared<LoadStream>(request->id());
+            RETURN_IF_ERROR((*load_stream)->init(request));
+            _load_streams_map[load_id] = *load_stream;
         }
     }
-    load_stream->add_rpc_stream();
-    return load_stream;
+    return Status::OK();
 }
 
-void LoadStreamMgr::clear_load(PUniqueId load_id) {
-    std::string load_id_str = load_id.SerializeAsString();
+void LoadStreamMgr::clear_load(UniqueId load_id) {
     std::lock_guard l(_lock);
-    _load_streams_map.erase(load_id_str);
+    _load_streams_map.erase(load_id);
 }
 
 } // namespace doris

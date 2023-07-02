@@ -36,7 +36,10 @@ namespace doris {
 using SegIdMapping = std::vector<uint32_t>;
 class TabletStream {
 public:
-    TabletStream(int64_t id, uint32_t num_senders);
+    TabletStream(PUniqueId load_id, int64_t id, int64_t txn_id, uint32_t num_senders);
+
+    Status init(OlapTableSchemaParam* schema, int64_t partition_id);
+
     void append_data(uint32_t sender_id, uint32_t segid, bool eos, butil::IOBuf* data);
     Status close();
     int64_t id() { return _id; }
@@ -49,12 +52,17 @@ private:
     std::atomic<uint32_t> _next_segid;
     bthread::Mutex _lock;
     Status _failed_st;
+    PUniqueId _load_id;
+    int64_t _txn_id;
 };
 using TabletStreamSharedPtr = std::shared_ptr<TabletStream>;
 
 class IndexStream {
 public:
-    IndexStream(int64_t id, uint32_t num_senders): _id(id), _num_senders(num_senders) {}
+    IndexStream(PUniqueId load_id, int64_t id, int64_t txn_id, uint32_t num_senders,
+                std::shared_ptr<OlapTableSchemaParam> schema)
+            : _id(id), _num_senders(num_senders), _load_id(load_id), _txn_id(txn_id), _schema(schema) {
+    }
 
     void append_data(uint32_t sender_id, int64_t tablet_id, uint32_t segid, bool eos, butil::IOBuf* data);
 
@@ -66,14 +74,21 @@ private:
     uint32_t _num_senders;
     std::unordered_map<int64_t /*tabletid*/, TabletStreamSharedPtr> _tablet_streams_map;
     bthread::Mutex _lock;
+    PUniqueId _load_id;
+    int64_t _txn_id;
+    std::shared_ptr<OlapTableSchemaParam> _schema;
+    std::unordered_map<int64_t, int64_t> _tablet_partitions;
+    std::vector<int64_t> _failed_tablet_ids;
 };
 using IndexStreamSharedPtr = std::shared_ptr<IndexStream>;
 
 using StreamId = brpc::StreamId;
 class LoadStream : public brpc::StreamInputHandler {
 public:
-    LoadStream(PUniqueId load_id, uint32_t num_senders);
+    LoadStream(PUniqueId id);
     ~LoadStream();
+
+    Status init(const PTabletWriterOpenRequest* request);
 
     uint32_t add_rpc_stream() { return ++_num_rpc_streams; }
     uint32_t remove_rpc_stream() { return --_num_rpc_streams; }
@@ -88,7 +103,8 @@ public:
 
 private:
     void _parse_header(butil::IOBuf* const message, PStreamHeader& hdr);
-    void _append_data(uint32_t sender_id, int64_t index_id, int64_t tablet_id, uint32_t segid, bool eos, butil::IOBuf* data);
+    void _append_data(uint32_t sender_id, int64_t index_id, int64_t tablet_id,
+                      uint32_t segid, bool eos, butil::IOBuf* data);
     void _report_result(StreamId stream, std::vector<int64_t>* success_tablet_ids,
                          std::vector<int64_t>* failed_tablet_ids);
  
@@ -97,9 +113,11 @@ private:
     std::unordered_map<int64_t, IndexStreamSharedPtr> _index_streams_map;
     std::atomic<uint32_t> _num_rpc_streams;
     std::vector<bool> _senders_status;
-    uint32_t _num_working_senders;
     bthread::Mutex _lock;
+    uint32_t _num_working_senders;
     uint32_t _num_senders;
+    int64_t _txn_id;
+    std::shared_ptr<OlapTableSchemaParam> _schema;
 };
 
 using LoadStreamSharedPtr = std::shared_ptr<LoadStream>;
