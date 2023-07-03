@@ -196,12 +196,20 @@ void LoadStream::close(uint32_t sender_id, std::vector<int64_t>* success_tablet_
 void LoadStream::_report_result(StreamId stream, std::vector<int64_t>* success_tablet_ids,
                                 std::vector<int64_t>* failed_tablet_ids) {
     LOG(INFO) << "OOXXOO report result, success tablet num " << success_tablet_ids->size()
-              << "failed tablet num " << failed_tablet_ids->size();
+              << ", failed tablet num " << failed_tablet_ids->size();
     // TODO
     butil::IOBuf buf;
     PWriteStreamSinkResponse response;
+    response.set_allocated_id(&_id);
+    for (auto id : *success_tablet_ids) {
+        response.add_success_tablets(id);
+    }
+    for (auto id : *failed_tablet_ids) {
+        response.add_failed_tablets(id);
+    }
     buf.append(response.SerializeAsString());
     int ret = brpc::StreamWrite(stream, buf);
+    response.release_id();
     // TODO: handle eagain
     if (ret == EAGAIN) {
         LOG(WARNING) << "OOXXOO report status EAGAIN";
