@@ -53,7 +53,7 @@ Status StreamSinkFileWriter::appendv(const OwnedSlice* data, size_t data_cnt) {
     header.set_index_id(_index_id);
     header.set_tablet_id(_tablet_id);
     header.set_segment_id(_segment_id);
-    header.set_opcode(header.APPEND_DATA);
+    header.set_opcode(doris::PStreamHeader::APPEND_DATA);
     size_t header_len = header.ByteSizeLong();
 
     buf.append(reinterpret_cast<uint8_t*>(&header_len), sizeof(header_len));
@@ -81,6 +81,8 @@ Status StreamSinkFileWriter::finalize() {
     header.set_index_id(_index_id);
     header.set_tablet_id(_tablet_id);
     header.set_segment_id(_segment_id);
+    header.set_opcode(doris::PStreamHeader::APPEND_DATA);
+    header.set_segment_eos(true);
     size_t header_len = header.ByteSizeLong();
 
     LOG(INFO) << "segment_size: " << _bytes_appended;

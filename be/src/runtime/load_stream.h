@@ -88,7 +88,7 @@ public:
     LoadStream(PUniqueId id);
     ~LoadStream();
 
-    Status init(const PTabletWriterOpenRequest* request);
+    Status init(const POpenStreamSinkRequest* request);
 
     uint32_t add_rpc_stream() { return ++_num_rpc_streams; }
     uint32_t remove_rpc_stream() { return --_num_rpc_streams; }

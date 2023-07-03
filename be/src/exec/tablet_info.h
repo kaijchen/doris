@@ -228,7 +228,7 @@ public:
     int64_t db_id() const { return _t_param.db_id; }
     int64_t table_id() const { return _t_param.table_id; }
     int64_t version() const { return _t_param.version; }
-    int64_t any_tablet_id() const { return _tablets.begin()->first; }
+    const std::unordered_map<int64_t, TabletLocation*>& tablets() const { return _tablets; }
 
     TabletLocation* find_tablet(int64_t tablet_id) const {
         auto it = _tablets.find(tablet_id);

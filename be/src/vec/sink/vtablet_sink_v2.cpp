@@ -295,15 +295,16 @@ Status VOlapTableSinkV2::_init_stream_pool(const NodeInfo& node_info, StreamPool
                   << node_info.host << ":" << node_info.brpc_port << ")";
         const auto& stub = _state->exec_env()->brpc_internal_client_cache()->get_client(
                 node_info.host, node_info.brpc_port);
-        PTabletWriterOpenRequest request;
-        /*request.set_allocated_id(&_load_id);
-        request.set_tablet_id(_location->any_tablet_id());
+        POpenStreamSinkRequest request;
+        request.set_allocated_id(&_load_id);
+        request.set_num_senders(_num_senders);
+        request.set_txn_id(_txn_id);
         request.set_backend_id(node_info.id);
-        */
+        request.set_allocated_schema(_schema->to_protobuf());
         POpenStreamSinkResponse response;
         stub->open_stream_sink(&cntl, &request, &response, nullptr);
         // TODO: this is a debug log
-        LOG(INFO) << "Got tablet schema of " << request.tablet_id() << " from backend "
+        LOG(INFO) << "Got tablet schema from backend "
                   << node_info.id << ": num_short_key_columns = "
                   << response.tablet_schema().num_short_key_columns()
                   << ", num_rows_per_row_block = "
@@ -314,6 +315,7 @@ Status VOlapTableSinkV2::_init_stream_pool(const NodeInfo& node_info, StreamPool
         _tablet_schema->init_from_pb(response.tablet_schema());
         _enable_unique_key_merge_on_write = response.enable_unique_key_merge_on_write();
         request.release_id();
+        request.release_schema();
         if (cntl.Failed()) {
             LOG(ERROR) << "Fail to connect stream, " << cntl.ErrorText();
             return Status::RpcError("Failed to connect stream");

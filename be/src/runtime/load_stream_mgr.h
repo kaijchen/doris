@@ -37,7 +37,7 @@ public:
     LoadStreamMgr(uint32_t segment_file_writer_thread_num);
     ~LoadStreamMgr();
 
-    Status try_open_load_stream(const PTabletWriterOpenRequest* request, LoadStreamSharedPtr*);
+    Status try_open_load_stream(const POpenStreamSinkRequest* request, LoadStreamSharedPtr*);
     void clear_load(UniqueId loadid);
     std::unique_ptr<ThreadPoolToken> new_token() {
         return _file_writer_thread_pool->new_token(ThreadPool::ExecutionMode::SERIAL);

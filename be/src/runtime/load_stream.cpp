@@ -158,7 +158,7 @@ LoadStream::LoadStream(PUniqueId id) : _id(id) {
 LoadStream::~LoadStream() {
 }
 
-Status LoadStream::init(const PTabletWriterOpenRequest* request) {
+Status LoadStream::init(const POpenStreamSinkRequest* request) {
     _num_senders = request->num_senders();
     _num_working_senders = request->num_senders();
     _senders_status.resize(_num_senders, true);

@@ -493,7 +493,7 @@ Status DeltaWriterV2::_notify_last_segment() {
     header.set_allocated_load_id(&_req.load_id);
     header.set_index_id(_req.index_id);
     header.set_tablet_id(_req.tablet_id);
-    // header.set_opcode(doris::PStreamHeader::CLOSE_STREAM);
+    header.set_opcode(doris::PStreamHeader::CLOSE_LOAD);
     header.set_allocated_rowset_meta(&rowset_meta_pb);
     size_t header_len = header.ByteSizeLong();
     buf.append(reinterpret_cast<uint8_t*>(&header_len), sizeof(header_len));

@@ -251,7 +251,7 @@ void PInternalServiceImpl::tablet_writer_open(google::protobuf::RpcController* c
 }
 
 void PInternalServiceImpl::open_stream_sink(google::protobuf::RpcController* controller,
-                                            const PTabletWriterOpenRequest* request,
+                                            const POpenStreamSinkRequest* request,
                                             POpenStreamSinkResponse* response,
                                             google::protobuf::Closure* done) {
     brpc::ClosureGuard done_guard(done);

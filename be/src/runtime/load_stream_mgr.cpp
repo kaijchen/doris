@@ -41,7 +41,7 @@ LoadStreamMgr::~LoadStreamMgr() {
     _file_writer_thread_pool->shutdown();
 }
 
-Status LoadStreamMgr::try_open_load_stream(const PTabletWriterOpenRequest* request,
+Status LoadStreamMgr::try_open_load_stream(const POpenStreamSinkRequest* request,
                                            LoadStreamSharedPtr* load_stream) {
     UniqueId load_id(request->id());
 

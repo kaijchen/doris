@@ -682,9 +682,10 @@ message PGetTabletVersionsResponse {
 message POpenStreamSinkRequest {
     optional PUniqueId id = 1;
     optional int32 num_senders = 2;
-    optional int64 txnid = 3;
+    optional int64 txn_id = 3;
     optional int64 tablet_id = 4;
     optional int32 backend_id = 5;
+    optional POlapTableSchemaParam schema = 6;
 };
 
 message POpenStreamSinkResponse {
@@ -702,7 +703,6 @@ message PWriteStreamSinkResponse {
 
 message PStreamHeader {
     enum Opcode {
-        OPEN_FILE = 0;
         APPEND_DATA = 1;
         CLOSE_LOAD = 2;
     }

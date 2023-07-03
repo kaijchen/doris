@@ -87,7 +87,7 @@ public:
                             google::protobuf::Closure* done) override;
 
     void open_stream_sink(google::protobuf::RpcController* controller,
-                          const PTabletWriterOpenRequest* request, POpenStreamSinkResponse* response,
+                          const POpenStreamSinkRequest* request, POpenStreamSinkResponse* response,
                           google::protobuf::Closure* done) override;
 
     void open_partition(google::protobuf::RpcController* controller,
