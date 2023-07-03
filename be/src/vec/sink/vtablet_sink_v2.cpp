@@ -111,22 +111,22 @@ int StreamSinkHandler::on_received_messages(brpc::StreamId id, butil::IOBuf* con
 
         int replica = _sink->_num_replicas;
 
-        auto key = std::make_pair(response.tablet_id(), response.index_id());
+        auto tablet_id = response.tablet_id();
 
         if (response.success()) {
             std::lock_guard<bthread::Mutex> l(_sink->_tablet_success_map_mutex);
-            if (_sink->_tablet_success_map.count(key) == 0) {
-                _sink->_tablet_success_map.insert({key, {}});
+            if (_sink->_tablet_success_map.count(tablet_id) == 0) {
+                _sink->_tablet_success_map.insert({tablet_id, {}});
             }
-            _sink->_tablet_success_map[key].push_back(backend_id);
+            _sink->_tablet_success_map[tablet_id].push_back(backend_id);
         } else {
             LOG(WARNING) << "stream sink failed: " << response.error_msg();
             std::lock_guard<bthread::Mutex> l(_sink->_tablet_failure_map_mutex);
-            if (_sink->_tablet_failure_map.count(key) == 0) {
-                _sink->_tablet_failure_map.insert({key, {}});
+            if (_sink->_tablet_failure_map.count(tablet_id) == 0) {
+                _sink->_tablet_failure_map.insert({tablet_id, {}});
             }
-            _sink->_tablet_failure_map[key].push_back(backend_id);
-            if (_sink->_tablet_failure_map[key].size() * 2 >= replica) {
+            _sink->_tablet_failure_map[tablet_id].push_back(backend_id);
+            if (_sink->_tablet_failure_map[tablet_id].size() * 2 >= replica) {
                 // TODO: _sink->cancel();
             }
         }
@@ -394,11 +394,13 @@ void VOlapTableSinkV2::_generate_rows_for_tablet(RowsForTablet& rows_for_tablet,
     // Generate channel payload for sinking data to each tablet
     for (const auto& index : partition->indexes) {
         auto tablet_id = index.tablets[tablet_index];
-        auto key = TabletKey {partition->id, index.index_id, tablet_id};
-        if (rows_for_tablet.count(key) == 0) {
-            rows_for_tablet.insert({key, std::vector<int32_t>()});
+        if (rows_for_tablet.count(tablet_id) == 0) {
+            Rows rows;
+            rows.partition_id = partition->id;
+            rows.index_id = index.index_id;
+            rows_for_tablet.insert({tablet_id, rows});
         }
-        rows_for_tablet[key].push_back(row_idx);
+        rows_for_tablet[tablet_id].row_idxes.push_back(row_idx);
         _number_output_rows += row_cnt;
     }
 }
@@ -494,17 +496,17 @@ Status VOlapTableSinkV2::send(RuntimeState* state, vectorized::Block* input_bloc
     _row_distribution_watch.stop();
 
     // For each tablet, send its rows from block to delta writer
-    for (const auto& entry : rows_for_tablet) {
+    for (const auto& [tablet_id, rows] : rows_for_tablet) {
         bthread_t th;
         auto closure = new WriteMemtableTaskClosure {};
         closure->sink = this;
         closure->block = block;
-        closure->partition_id = entry.first.partition_id;
-        closure->index_id = entry.first.index_id;
-        closure->tablet_id = entry.first.tablet_id;
-        closure->row_idxes = entry.second;
-        RETURN_IF_ERROR(_select_streams(closure->tablet_id, closure->streams));
-        _opened_tablets.insert(std::make_pair(closure->tablet_id, closure->index_id));
+        closure->tablet_id = tablet_id;
+        closure->partition_id = rows.partition_id;
+        closure->index_id = rows.index_id;
+        closure->row_idxes = rows.row_idxes;
+        RETURN_IF_ERROR(_select_streams(tablet_id, closure->streams));
+        _opened_tablets.insert(tablet_id);
         auto cnt = _flying_task_count.fetch_add(1) + 1;
         DLOG(INFO) << "Creating WriteMemtableTask for Tablet(tablet id: " << closure->tablet_id
                    << ", index id: " << closure->index_id << "), flying task count: " << cnt;
@@ -521,8 +523,7 @@ void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
     DeltaWriterV2* delta_writer = nullptr;
     {
         std::lock_guard<bthread::Mutex> l(*sink->_delta_writer_for_tablet_mutex);
-        auto key = std::make_pair(ctx->tablet_id, ctx->index_id);
-        auto it = sink->_delta_writer_for_tablet->find(key);
+        auto it = sink->_delta_writer_for_tablet->find(ctx->tablet_id);
         if (it == sink->_delta_writer_for_tablet->end()) {
             DLOG(INFO) << "Creating DeltaWriterV2 for Tablet(tablet id: " << ctx->tablet_id
                        << ", index id: " << ctx->index_id << ")";
@@ -552,7 +553,7 @@ void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
             }
             delta_writer->register_flying_memtable_counter(sink->_flying_memtable_counter);
             sink->_delta_writer_for_tablet->insert(
-                    {key, std::unique_ptr<DeltaWriterV2>(delta_writer)});
+                    {ctx->tablet_id, std::unique_ptr<DeltaWriterV2>(delta_writer)});
         } else {
             DLOG(INFO) << "Reusing DeltaWriterV2 for Tablet(tablet id: " << ctx->tablet_id
                        << ", index id: " << ctx->index_id << ")";
@@ -627,10 +628,9 @@ Status VOlapTableSinkV2::close(RuntimeState* state, Status exec_status) {
                     std::lock_guard<bthread::Mutex> l(_tablet_failure_map_mutex);
                     failed_replicas = _tablet_failure_map[tablet].size();
                 }
-                LOG(INFO) << "expected " << _num_replicas
-                          << " replicas for tablet [tablet id: " << tablet.first
-                          << ", index id: " << tablet.second << "], got " << success_replicas
-                          << " success replicas, " << failed_replicas << " failed replicas";
+                LOG(INFO) << "expected " << _num_replicas << " replicas for tablet " << tablet
+                          << ", got " << success_replicas << " success replicas, "
+                          << failed_replicas << " failed replicas";
                 should_wait = success_replicas + failed_replicas < _num_replicas &&
                               failed_replicas * 2 < _num_replicas;
                 if (should_wait) {
@@ -651,10 +651,10 @@ Status VOlapTableSinkV2::close(RuntimeState* state, Status exec_status) {
         _stream_pool_for_node.reset();
 
         std::vector<TTabletCommitInfo> tablet_commit_infos;
-        for (auto& entry : _tablet_success_map) {
-            for (int64_t be_id : entry.second) {
+        for (auto& [tablet_id, backends] : _tablet_success_map) {
+            for (int64_t be_id : backends) {
                 TTabletCommitInfo commit_info;
-                commit_info.tabletId = entry.first.first;
+                commit_info.tabletId = tablet_id;
                 commit_info.backendId = be_id;
                 tablet_commit_infos.emplace_back(std::move(commit_info));
             }

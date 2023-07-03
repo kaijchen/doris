@@ -96,9 +96,7 @@ struct WriteMemtableTaskClosure {
     std::vector<brpc::StreamId> streams;
 };
 
-// <tablet_id, index_id>
-using TabletID = std::pair<int64_t, int64_t>;
-using DeltaWriterForTablet = std::unordered_map<TabletID, std::unique_ptr<DeltaWriterV2>>;
+using DeltaWriterForTablet = std::unordered_map<int64_t, std::unique_ptr<DeltaWriterV2>>;
 using StreamPool = std::vector<brpc::StreamId>;
 using StreamPoolForNode = std::unordered_map<int64_t, StreamPool>;
 using NodeIdForStream = std::unordered_map<brpc::StreamId, int64_t>;
@@ -118,20 +116,13 @@ private:
     VOlapTableSinkV2* _sink;
 };
 
-struct TabletKey {
+struct Rows {
     int64_t partition_id;
     int64_t index_id;
-    int64_t tablet_id;
-    bool operator==(const TabletKey&) const = default;
+    std::vector<int32_t> row_idxes;
 };
 
-struct TabletKeyHash {
-    std::size_t operator()(const TabletKey& k) const {
-        return (k.partition_id << 2) ^ (k.index_id << 1) ^ (k.tablet_id);
-    }
-};
-// map<TabletKey, row_idxes>
-using RowsForTablet = std::unordered_map<TabletKey, std::vector<int32_t>, TabletKeyHash>;
+using RowsForTablet = std::unordered_map<int64_t, Rows>;
 
 // Write block data to Olap Table.
 // When OlapTableSink::open() called, there will be a consumer thread running in the background.
@@ -319,10 +310,10 @@ private:
     std::atomic<int32_t> _flying_task_count {0};
     std::shared_ptr<std::atomic<int32_t>> _flying_memtable_counter;
 
-    std::unordered_set<TabletID> _opened_tablets;
+    std::unordered_set<int64_t> _opened_tablets;
 
-    std::unordered_map<TabletID, std::vector<int64_t>> _tablet_success_map;
-    std::unordered_map<TabletID, std::vector<int64_t>> _tablet_failure_map;
+    std::unordered_map<int64_t, std::vector<int64_t>> _tablet_success_map;
+    std::unordered_map<int64_t, std::vector<int64_t>> _tablet_failure_map;
     bthread::Mutex _tablet_success_map_mutex;
     bthread::Mutex _tablet_failure_map_mutex;
 
