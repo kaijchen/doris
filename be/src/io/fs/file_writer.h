@@ -46,7 +46,7 @@ public:
 
     Status append(const Slice& data) { return appendv(&data, 1); }
 
-    virtual Status appendv(const OwnedSlice* data, size_t data_cnt) {
+    virtual Status appendv(OwnedSlice* data, size_t data_cnt) {
         std::vector<Slice> slices;
         for (int i = 0; i < data_cnt; i++) {
             slices.emplace_back(data[i].slice());

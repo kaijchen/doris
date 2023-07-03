@@ -912,7 +912,7 @@ Status SegmentWriter::_write_footer() {
     return _write_raw_data(slices);
 }
 
-Status SegmentWriter::_write_raw_data(const std::vector<OwnedSlice>& slices) {
+Status SegmentWriter::_write_raw_data(std::vector<OwnedSlice>& slices) {
     RETURN_IF_ERROR(_file_writer->appendv(&slices[0], slices.size()));
     return Status::OK();
 }

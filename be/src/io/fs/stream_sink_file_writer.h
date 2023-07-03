@@ -20,6 +20,8 @@
 #include <brpc/stream.h>
 #include <gen_cpp/internal_service.pb.h>
 
+#include <queue>
+
 #include "io/fs/file_writer.h"
 #include "vec/common/allocator.h"
 
@@ -40,7 +42,7 @@ public:
     void init(PUniqueId load_id, int64_t index_id, int64_t tablet_id,
               int32_t segment_id, int32_t schema_hash);
 
-    Status appendv(const OwnedSlice* data, size_t data_cnt) override;
+    Status appendv(OwnedSlice* data, size_t data_cnt) override;
 
     virtual Status appendv(const Slice* data, size_t data_cnt) override {
         CHECK(false);
@@ -57,6 +59,12 @@ public:
 
 private:
     Status _stream_sender(butil::IOBuf buf) const { return send_with_retry(_stream, buf); }
+    Status _flush_pending_slices(bool eos);
+
+private:
+    std::queue<OwnedSlice> _pending_slices;
+    size_t _max_pending_bytes = config::streamsink_filewriter_batchsize;
+    size_t _pending_bytes;
 
     brpc::StreamId _stream;
 
