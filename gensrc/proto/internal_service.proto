@@ -712,9 +712,8 @@ message PStreamHeader {
     optional int32 segment_id = 4;
     optional Opcode opcode = 5;
     optional bool segment_eos = 6;
-    optional RowsetMetaPB rowset_meta = 7;
-    optional int32 tablet_schema_hash = 8;
-    optional uint32 sender_id = 9;
+    optional int32 tablet_schema_hash = 7;
+    optional uint32 sender_id = 8;
 }
 
 service PBackendService {

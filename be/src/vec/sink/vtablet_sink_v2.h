@@ -197,6 +197,8 @@ private:
 
     Status _select_streams(int64_t tablet_id, std::vector<brpc::StreamId>& streams);
 
+    Status _close_load(brpc::StreamId stream);
+
     std::shared_ptr<MemTracker> _mem_tracker;
 
     ObjectPool* _pool;

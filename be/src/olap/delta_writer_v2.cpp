@@ -37,7 +37,6 @@
 #include "gutil/integral_types.h"
 #include "gutil/strings/numbers.h"
 #include "io/fs/file_writer.h" // IWYU pragma: keep
-#include "io/fs/stream_sink_file_writer.h"
 #include "olap/data_dir.h"
 #include "olap/memtable.h"
 #include "olap/memtable_flush_executor.h"
@@ -380,8 +379,6 @@ Status DeltaWriterV2::close_wait() {
         return Status::Error<MEM_ALLOC_FAILED>();
     }
 
-    RETURN_IF_ERROR(_notify_last_segment());
-
     _delta_written_success = true;
 
     // const FlushStatistic& stat = _flush_token->get_stats();
@@ -482,28 +479,6 @@ void DeltaWriterV2::_build_current_tablet_schema(int64_t index_id,
     // set partial update columns info
     _tablet_schema->set_partial_update_info(table_schema_param->is_partial_update(),
                                             table_schema_param->partial_update_input_columns());
-}
-
-Status DeltaWriterV2::_notify_last_segment() {
-    brpc::StreamId stream = *_streams.begin();
-    RowsetMetaPB rowset_meta_pb = _cur_rowset->rowset_meta()->get_rowset_pb();
-
-    butil::IOBuf buf;
-    PStreamHeader header;
-    header.set_allocated_load_id(&_req.load_id);
-    header.set_index_id(_req.index_id);
-    header.set_tablet_id(_req.tablet_id);
-    header.set_opcode(doris::PStreamHeader::CLOSE_LOAD);
-    header.set_allocated_rowset_meta(&rowset_meta_pb);
-    size_t header_len = header.ByteSizeLong();
-    buf.append(reinterpret_cast<uint8_t*>(&header_len), sizeof(header_len));
-    buf.append(header.SerializeAsString());
-
-    io::StreamSinkFileWriter::send_with_retry(stream, buf);
-
-    header.release_load_id();
-    header.release_rowset_meta();
-    return Status::OK();
 }
 
 } // namespace doris

@@ -46,6 +46,7 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exec/tablet_info.h"
+#include "io/fs/stream_sink_file_writer.h"
 #include "olap/delta_writer_v2.h"
 #include "runtime/define_primitive_type.h"
 #include "runtime/descriptors.h"
@@ -596,6 +597,12 @@ Status VOlapTableSinkV2::close(RuntimeState* state, Status exec_status) {
         }
         _delta_writer_for_tablet.reset();
 
+        for (const auto& entry : *_stream_pool_for_node) {
+            for (auto stream_id : entry.second) {
+                RETURN_IF_ERROR(_close_load(stream_id));
+            }
+        }
+
         for (const auto& tablet : _opened_tablets) {
             bool should_wait = true;
             while (should_wait) {
@@ -673,6 +680,19 @@ Status VOlapTableSinkV2::close(RuntimeState* state, Status exec_status) {
     _close_status = status;
     DataSink::close(state, exec_status);
     return status;
+}
+
+Status VOlapTableSinkV2::_close_load(brpc::StreamId stream) {
+    butil::IOBuf buf;
+    PStreamHeader header;
+    header.set_allocated_load_id(&_load_id);
+    header.set_opcode(doris::PStreamHeader::CLOSE_LOAD);
+    size_t header_len = header.ByteSizeLong();
+    buf.append(reinterpret_cast<uint8_t*>(&header_len), sizeof(header_len));
+    buf.append(header.SerializeAsString());
+    io::StreamSinkFileWriter::send_with_retry(stream, buf);
+    header.release_load_id();
+    return Status::OK();
 }
 
 template <bool is_min>
