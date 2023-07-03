@@ -61,6 +61,11 @@ message PTabletWithPartition {
     required int64 tablet_id = 2;
 }
 
+message PTabletWithIndex {
+    required int64 index_id = 1;
+    required int64 tablet_id = 2;
+}
+
 message PTabletInfo {
     required int64 tablet_id = 1;
     required int32 schema_hash = 2;
@@ -683,15 +688,20 @@ message POpenStreamSinkRequest {
     optional PUniqueId id = 1;
     optional int32 num_senders = 2;
     optional int64 txn_id = 3;
-    optional int64 tablet_id = 4;
-    optional int32 backend_id = 5;
-    optional POlapTableSchemaParam schema = 6;
+    optional int32 backend_id = 4;
+    optional POlapTableSchemaParam schema = 5;
+    repeated PTabletWithIndex tablets = 6;
+};
+
+message PTabletSchemaWithIndex {
+    optional int64 index_id = 1;
+    optional TabletSchemaPB tablet_schema = 2;
+    optional bool enable_unique_key_merge_on_write = 3;
 };
 
 message POpenStreamSinkResponse {
     optional PStatus status = 1;
-    optional TabletSchemaPB tablet_schema = 2;
-    optional bool enable_unique_key_merge_on_write = 3;
+    repeated PTabletSchemaWithIndex tablet_schemas = 2;
 };
 
 message PWriteStreamSinkResponse {

@@ -223,8 +223,8 @@ private:
 
     // TODO(zc): think about cache this data
     std::shared_ptr<OlapTableSchemaParam> _schema;
-    std::shared_ptr<TabletSchema> _tablet_schema;
-    bool _enable_unique_key_merge_on_write = false;
+    std::unordered_map<int64_t, std::shared_ptr<TabletSchema>> _tablet_schema_for_index;
+    std::unordered_map<int64_t, bool> _enable_unique_mow_for_index;
     OlapTableLocationParam* _location = nullptr;
     bool _write_single_replica = false;
     OlapTableLocationParam* _slave_location = nullptr;

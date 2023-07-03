@@ -302,19 +302,30 @@ Status VOlapTableSinkV2::_init_stream_pool(const NodeInfo& node_info, StreamPool
         request.set_txn_id(_txn_id);
         request.set_backend_id(node_info.id);
         request.set_allocated_schema(_schema->to_protobuf());
+        for (const auto& partition : _vpartition->get_partitions()) {
+            for (const auto& index : partition->indexes) {
+                auto req = request.add_tablets();
+                req->set_tablet_id(index.tablets[0]);
+                req->set_index_id(index.index_id);
+            }
+        }
         POpenStreamSinkResponse response;
         stub->open_stream_sink(&cntl, &request, &response, nullptr);
-        // TODO: this is a debug log
-        LOG(INFO) << "Got tablet schema from backend "
-                  << node_info.id << ": num_short_key_columns = "
-                  << response.tablet_schema().num_short_key_columns()
-                  << ", num_rows_per_row_block = "
-                  << response.tablet_schema().num_rows_per_row_block()
-                  << ", enable_unique_key_merge_on_write = "
-                  << response.enable_unique_key_merge_on_write();
-        _tablet_schema = std::make_shared<TabletSchema>();
-        _tablet_schema->init_from_pb(response.tablet_schema());
-        _enable_unique_key_merge_on_write = response.enable_unique_key_merge_on_write();
+        for (const auto& resp : response.tablet_schemas()) {
+            auto tablet_schema = std::make_shared<TabletSchema>();
+            tablet_schema->init_from_pb(resp.tablet_schema());
+            _tablet_schema_for_index.insert({resp.index_id(), tablet_schema});
+            _enable_unique_mow_for_index.insert(
+                    {resp.index_id(), resp.enable_unique_key_merge_on_write()});
+            // TODO: this is a debug log
+            LOG(INFO) << "Got tablet schema from backend "
+                    << node_info.id << ": num_short_key_columns = "
+                    << tablet_schema->num_short_key_columns()
+                    << ", num_rows_per_row_block = "
+                    << tablet_schema->num_rows_per_row_block()
+                    << ", enable_unique_key_merge_on_write = "
+                    << resp.enable_unique_key_merge_on_write();
+        }
         request.release_id();
         request.release_schema();
         if (cntl.Failed()) {
@@ -525,8 +536,8 @@ void* VOlapTableSinkV2::_write_memtable_task(void* closure) {
             wrequest.tuple_desc = sink->_output_tuple_desc;
             wrequest.is_high_priority = sink->_is_high_priority;
             wrequest.table_schema_param = sink->_schema.get();
-            wrequest.tablet_schema = sink->_tablet_schema;
-            wrequest.enable_unique_key_merge_on_write = sink->_enable_unique_key_merge_on_write;
+            wrequest.tablet_schema = sink->_tablet_schema_for_index[ctx->index_id];
+            wrequest.enable_unique_key_merge_on_write = sink->_enable_unique_mow_for_index[ctx->index_id];
             for (auto& index : sink->_schema->indexes()) {
                 if (index->index_id == ctx->index_id) {
                     wrequest.slots = &index->slots;
