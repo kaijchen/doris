@@ -227,8 +227,7 @@ void LoadStream::_parse_header(butil::IOBuf* const message, PStreamHeader& hdr) 
     LOG(INFO) << "header parse result:"
               << "opcode = " << hdr.opcode()
               << ", indexid = " << hdr.index_id() << ", tabletid = " << hdr.tablet_id()
-              << ", segmentid = " << hdr.segment_id()
-              << ", schema_hash = " << hdr.tablet_schema_hash();
+              << ", segmentid = " << hdr.segment_id();
 }
 
 void LoadStream::_append_data(uint32_t sender_id, int64_t index_id, int64_t tablet_id, uint32_t segid,

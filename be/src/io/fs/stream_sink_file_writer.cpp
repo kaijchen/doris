@@ -28,12 +28,13 @@ StreamSinkFileWriter::StreamSinkFileWriter(brpc::StreamId stream_id) : _stream(s
 
 StreamSinkFileWriter::~StreamSinkFileWriter() {}
 
-void StreamSinkFileWriter::init(PUniqueId load_id, int64_t index_id, int64_t tablet_id,
-                                int32_t segment_id, int32_t schema_hash) {
-    LOG(INFO) << "init stream writer, load id(" << UniqueId(load_id).to_string() << "), index id("
-              << index_id << "), tablet_id(" << tablet_id << "), segment_id("
-              << segment_id << "), schema_hash(" << schema_hash << ")";
+void StreamSinkFileWriter::init(PUniqueId load_id, int64_t partition_id, int64_t index_id,
+                                int64_t tablet_id, int32_t segment_id) {
+    LOG(INFO) << "init stream writer, load id(" << UniqueId(load_id).to_string()
+              << "), partition id(" << partition_id << "), index id(" << index_id << "), tablet_id("
+              << tablet_id << "), segment_id(" << segment_id << ")";
     _load_id = load_id;
+    _partition_id = partition_id;
     _index_id = index_id;
     _tablet_id = tablet_id;
     _segment_id = segment_id;
@@ -62,6 +63,7 @@ Status StreamSinkFileWriter::appendv(OwnedSlice* data, size_t data_cnt) {
 Status StreamSinkFileWriter::_flush_pending_slices(bool eos) {
     PStreamHeader header;
     header.set_allocated_load_id(&_load_id);
+    header.set_partition_id(_partition_id);
     header.set_index_id(_index_id);
     header.set_tablet_id(_tablet_id);
     header.set_segment_id(_segment_id);

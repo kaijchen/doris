@@ -151,16 +151,16 @@ TEST_F(StreamSinkFileWriterTest, TestInit) {
     io::StreamSinkFileWriter writer(_stream);
     PUniqueId load_id;
     load_id.set_hi(1);
-    load_id.set_lo(1);
-    writer.init(load_id, 1, 1, 1, 123);
+    load_id.set_lo(2);
+    writer.init(load_id, 3, 4, 5, 6);
 }
 
 TEST_F(StreamSinkFileWriterTest, TestAppend) {
     io::StreamSinkFileWriter writer(_stream);
     PUniqueId load_id;
     load_id.set_hi(1);
-    load_id.set_lo(1);
-    writer.init(load_id, 1, 1, 1, 123);
+    load_id.set_lo(2);
+    writer.init(load_id, 3, 4, 5, 6);
     std::vector<OwnedSlice> slices;
     faststring str;
     str.assign_copy("hello");
@@ -172,8 +172,8 @@ TEST_F(StreamSinkFileWriterTest, TestFinalize) {
     io::StreamSinkFileWriter writer(_stream);
     PUniqueId load_id;
     load_id.set_hi(1);
-    load_id.set_lo(1);
-    writer.init(load_id, 1, 1, 1, 123);
+    load_id.set_lo(2);
+    writer.init(load_id, 3, 4, 5, 6);
     CHECK_STATUS_OK(writer.finalize());
 }
 

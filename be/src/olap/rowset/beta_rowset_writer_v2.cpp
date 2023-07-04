@@ -290,14 +290,14 @@ Status BetaRowsetWriterV2::_do_create_segment_writer(
                                  : allocate_segment_id();
     path = BetaRowset::segment_file_path(_context.rowset_dir, _context.rowset_id, segment_id);
     io::FileWriterPtr file_writer;
+    auto partition_id = _rowset_meta->partition_id();
     auto index_id = _index_id;
     auto tablet_id = _rowset_meta->tablet_id();
     auto load_id = _rowset_meta->load_id();
     auto stream_id = *_streams.begin();
-    auto schema_hash = _context.tablet_schema_hash;
 
     auto stream_writer = std::make_unique<io::StreamSinkFileWriter>(stream_id);
-    stream_writer->init(load_id, index_id, tablet_id, segment_id, schema_hash);
+    stream_writer->init(load_id, partition_id, index_id, tablet_id, segment_id);
     file_writer = std::move(stream_writer);
 
     DCHECK(file_writer != nullptr);

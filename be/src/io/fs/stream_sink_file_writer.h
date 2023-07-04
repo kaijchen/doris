@@ -39,8 +39,8 @@ public:
 
     static Status send_with_retry(brpc::StreamId stream, butil::IOBuf buf);
 
-    void init(PUniqueId load_id, int64_t index_id, int64_t tablet_id,
-              int32_t segment_id, int32_t schema_hash);
+    void init(PUniqueId load_id, int64_t partition_id, int64_t index_id, int64_t tablet_id,
+              int32_t segment_id);
 
     Status appendv(OwnedSlice* data, size_t data_cnt) override;
 
@@ -69,6 +69,7 @@ private:
     brpc::StreamId _stream;
 
     PUniqueId _load_id;
+    int64_t _partition_id;
     int64_t _index_id;
     int64_t _tablet_id;
     int32_t _segment_id;

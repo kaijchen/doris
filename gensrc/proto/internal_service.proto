@@ -716,12 +716,12 @@ message PStreamHeader {
         CLOSE_LOAD = 2;
     }
     optional PUniqueId load_id = 1;
-    optional int64 index_id = 2;
-    optional int64 tablet_id = 3;
-    optional int32 segment_id = 4;
-    optional Opcode opcode = 5;
-    optional bool segment_eos = 6;
-    optional int32 tablet_schema_hash = 7;
+    optional int64 partition_id = 2;
+    optional int64 index_id = 3;
+    optional int64 tablet_id = 4;
+    optional int32 segment_id = 5;
+    optional Opcode opcode = 6;
+    optional bool segment_eos = 7;
     optional uint32 sender_id = 8;
 }
 
