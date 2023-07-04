@@ -23,7 +23,6 @@
 #include <queue>
 
 #include "io/fs/file_writer.h"
-#include "vec/common/allocator.h"
 
 namespace doris {
 
@@ -35,7 +34,7 @@ public:
     StreamSinkFileWriter(brpc::StreamId stream);
     ~StreamSinkFileWriter() override;
 
-    static void deleter(void* data) { Allocator<false, false, false>::free_no_munmap(data); }
+    static void deleter(void* data) { ::free(data); }
 
     static Status send_with_retry(brpc::StreamId stream, butil::IOBuf buf);
 
