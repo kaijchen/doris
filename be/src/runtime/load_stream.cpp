@@ -42,7 +42,6 @@ TabletStream::TabletStream(PUniqueId load_id, int64_t id, int64_t txn_id, uint32
     }
 
     _segids_mapping.resize(num_senders);
-    _failed_st = std::make_shared<Status>();
     _profile = profile->create_child(fmt::format("TabletStream {}", id), true, true);
     _append_data_timer = ADD_TIMER(_profile, "AppendDataTime");
     _add_segment_timer = ADD_TIMER(_profile, "AddSegmentTime");
@@ -51,7 +50,7 @@ TabletStream::TabletStream(PUniqueId load_id, int64_t id, int64_t txn_id, uint32
 
 inline std::ostream& operator<<(std::ostream& ostr, const TabletStream& tablet_stream) {
     ostr << "load_id=" << tablet_stream._load_id << ", txn_id=" << tablet_stream._txn_id
-         << ", tablet_id=" << tablet_stream._id << ", status=" << *tablet_stream._failed_st;
+         << ", tablet_id=" << tablet_stream._id << ", status=" << tablet_stream._status;
     return ostr;
 }
 
@@ -69,7 +68,7 @@ Status TabletStream::init(OlapTableSchemaParam* schema, int64_t index_id, int64_
     _load_stream_writer = std::make_shared<LoadStreamWriter>(&req, _profile);
     auto st = _load_stream_writer->init();
     if (!st.ok()) {
-        _failed_st = std::make_shared<Status>(st);
+        _status = st;
         LOG(INFO) << "failed to init rowset builder due to " << *this;
     }
     return st;
@@ -77,6 +76,9 @@ Status TabletStream::init(OlapTableSchemaParam* schema, int64_t index_id, int64_
 
 Status TabletStream::append_data(const PStreamHeader& header, butil::IOBuf* data) {
     // TODO failed early
+    if (!_status.ok()) {
+        return _status;
+    }
 
     // dispatch add_segment request
     if (header.opcode() == PStreamHeader::ADD_SEGMENT) {
@@ -88,12 +90,10 @@ Status TabletStream::append_data(const PStreamHeader& header, butil::IOBuf* data
     uint32_t sender_id = header.sender_id();
     // We don't need a lock protecting _segids_mapping, because it is written once.
     if (sender_id >= _segids_mapping.size()) {
-        LOG(WARNING) << "sender id is out of range, sender_id=" << sender_id
-                     << ", num_senders=" << _segids_mapping.size() << *this;
         std::lock_guard lock_guard(_lock);
-        _failed_st = std::make_shared<Status>(Status::Error<ErrorCode::INVALID_ARGUMENT>(
-                "sender id is out of range {}/{}", sender_id, _segids_mapping.size()));
-        return Status::Error<ErrorCode::INVALID_ARGUMENT>("unknown sender_id {}", sender_id);
+        _status = Status::Error<ErrorCode::INVALID_ARGUMENT>("sender id is out of range {}/{}",
+                                                                sender_id, _segids_mapping.size());
+        return _status;
     }
 
     uint32_t segid = header.segment_id();
@@ -125,8 +125,8 @@ Status TabletStream::append_data(const PStreamHeader& header, butil::IOBuf* data
         if (eos && st.ok()) {
             st = _load_stream_writer->close_segment(new_segid);
         }
-        if (!st.ok() && _failed_st->ok()) {
-            _failed_st = std::make_shared<Status>(st);
+        if (!st.ok()) {
+            _status = st;
             LOG(INFO) << "write data failed " << *this;
         }
     };
@@ -151,8 +151,8 @@ Status TabletStream::close() {
     for (auto& token : _flush_tokens) {
         token->wait();
     }
-    if (!_failed_st->ok()) {
-        return *_failed_st;
+    if (!_status.ok()) {
+        return _status;
     }
     return _load_stream_writer->close();
 }

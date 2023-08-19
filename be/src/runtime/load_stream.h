@@ -59,7 +59,7 @@ private:
     std::vector<SegIdMapping> _segids_mapping;
     std::atomic<uint32_t> _next_segid;
     bthread::Mutex _lock;
-    std::shared_ptr<Status> _failed_st;
+    Status _status;
     PUniqueId _load_id;
     int64_t _txn_id;
     RuntimeProfile* _profile;
