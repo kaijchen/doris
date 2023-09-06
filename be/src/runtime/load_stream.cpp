@@ -115,6 +115,9 @@ Status TabletStream::append_data(const PStreamHeader& header, butil::IOBuf* data
     bool eos = header.segment_eos();
     uint32_t new_segid = mapping->at(segid);
     DCHECK(new_segid != std::numeric_limits<uint32_t>::max());
+    LOG(INFO) << "APPEND_DATA tablet_id: " << _id << ", segment_id: " << segid
+              << ", src_id: " << src_id << ", new segid: " << new_segid << ", eos: " << eos
+              << ", seq: " << header.seq_id();
     butil::IOBuf buf = data->movable();
     auto flush_func = [this, new_segid, eos, buf, header]() {
         auto st = _load_stream_writer->append_data(new_segid, buf);
@@ -407,8 +410,9 @@ int LoadStream::on_received_messages(StreamId id, butil::IOBuf* const messages[]
 }
 
 void LoadStream::_dispatch(StreamId id, const PStreamHeader& hdr, butil::IOBuf* data) {
-    VLOG_DEBUG << PStreamHeader_Opcode_Name(hdr.opcode()) << " from " << hdr.src_id()
-               << " with tablet " << hdr.tablet_id();
+    LOG(INFO) << id << " " << PStreamHeader_Opcode_Name(hdr.opcode()) << " from " << hdr.src_id()
+              << " with tablet " << hdr.tablet_id() << " segment id " << hdr.segment_id()
+              << " segment_eos " << hdr.segment_eos() << " seq " << hdr.seq_id();
 
     {
         std::lock_guard lock_guard(_lock);

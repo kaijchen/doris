@@ -174,7 +174,7 @@ public:
 
 private:
     Status _encode_and_send(PStreamHeader& header, std::span<const Slice> data = {});
-    Status _send_with_buffer(butil::IOBuf& buf, bool eos = false);
+    Status _send_with_buffer(butil::IOBuf& buf, bool eos, PStreamHeader& header);
     Status _send_with_retry(butil::IOBuf& buf);
 
 protected:
@@ -192,6 +192,7 @@ protected:
     brpc::StreamId _stream_id;
     int64_t _src_id = -1; // source backend_id
     int64_t _dst_id = -1; // destination backend_id
+    std::atomic<int> _seq_id; // destination backend_id
     LoadStreamReplyHandler _handler {this};
 
     bthread::Mutex _success_tablets_mutex;

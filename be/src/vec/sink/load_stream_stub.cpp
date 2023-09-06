@@ -169,6 +169,8 @@ Status LoadStreamStub::append_data(int64_t partition_id, int64_t index_id, int64
     header.set_segment_id(segment_id);
     header.set_segment_eos(segment_eos);
     header.set_opcode(doris::PStreamHeader::APPEND_DATA);
+    LOG(INFO) << "stub APPEND_DATA tablet_id: " << tablet_id << ", segment_id: " << segment_id
+              << ", eos: " << segment_eos;
     return _encode_and_send(header, data);
 }
 
@@ -204,6 +206,7 @@ Status LoadStreamStub::close_load(const std::vector<PTabletID>& tablets_to_commi
 
 Status LoadStreamStub::_encode_and_send(PStreamHeader& header, std::span<const Slice> data) {
     butil::IOBuf buf;
+    header.set_seq_id(++_seq_id);
     size_t header_len = header.ByteSizeLong();
     buf.append(reinterpret_cast<uint8_t*>(&header_len), sizeof(header_len));
     buf.append(header.SerializeAsString());
@@ -214,16 +217,26 @@ Status LoadStreamStub::_encode_and_send(PStreamHeader& header, std::span<const S
         buf.append(slice.get_data(), slice.get_size());
     }
     bool eos = header.opcode() == doris::PStreamHeader::CLOSE_LOAD;
-    return _send_with_buffer(buf, eos);
+    if (header.opcode() == doris::PStreamHeader::APPEND_DATA) {
+        LOG(INFO) << _stream_id << " encode APPEND_DATA tablet_id: " << header.tablet_id()
+                  << ", segment_id: " << header.segment_id() << ", eos: " << header.segment_eos()
+                  << ", seq: " << header.seq_id();
+    }
+    return _send_with_buffer(buf, eos, header);
 }
 
-Status LoadStreamStub::_send_with_buffer(butil::IOBuf& buf, bool eos) {
+Status LoadStreamStub::_send_with_buffer(butil::IOBuf& buf, bool eos, PStreamHeader& header) {
     butil::IOBuf output;
     {
-        std::unique_lock<decltype(_buffer_mutex)> lock(_buffer_mutex);
+        std::lock_guard<decltype(_buffer_mutex)> lock(_buffer_mutex);
         _buffer.append(buf);
         if (eos || _buffer.size() >= config::brpc_streaming_client_batch_bytes) {
             output.swap(_buffer);
+        }
+        if (header.opcode() == doris::PStreamHeader::APPEND_DATA) {
+            LOG(INFO) << _stream_id << " batch APPEND_DATA tablet_id: " << header.tablet_id()
+                      << ", segment_id: " << header.segment_id()
+                      << ", eos: " << header.segment_eos() << ", seq: " << header.seq_id();
         }
     }
     if (output.size() == 0) {
@@ -234,6 +247,30 @@ Status LoadStreamStub::_send_with_buffer(butil::IOBuf& buf, bool eos) {
 }
 
 Status LoadStreamStub::_send_with_retry(butil::IOBuf& buf) {
+    {
+        butil::IOBuf tmp = buf;
+        while (tmp.size() > 0) {
+            size_t hdr_len = 0;
+            tmp.cutn((void*)&hdr_len, sizeof(size_t));
+            butil::IOBuf hdr_buf;
+            PStreamHeader header;
+            tmp.cutn(&hdr_buf, hdr_len);
+            butil::IOBufAsZeroCopyInputStream wrapper(hdr_buf);
+            header.ParseFromZeroCopyStream(&wrapper);
+
+            // step 2: cut data
+            size_t data_len = 0;
+            tmp.cutn((void*)&data_len, sizeof(size_t));
+            butil::IOBuf data_buf;
+            PStreamHeader data;
+            tmp.cutn(&data_buf, data_len);
+            if (header.opcode() == doris::PStreamHeader::APPEND_DATA) {
+                LOG(INFO) << _stream_id << " send APPEND_DATA tablet_id: " << header.tablet_id()
+                        << ", segment_id: " << header.segment_id()
+                        << ", eos: " << header.segment_eos() << ", seq: " << header.seq_id();
+            }
+        }
+    }
     for (;;) {
         int ret = brpc::StreamWrite(_stream_id, buf);
         switch (ret) {
