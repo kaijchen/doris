@@ -116,7 +116,7 @@ Status LoadStreamStub::open(BrpcClientCache<PBackendService_Stub>* client_cache,
     _dst_id = node_info.id;
     std::string host_port = get_host_port(node_info.host, node_info.brpc_port);
     brpc::StreamOptions opt;
-    opt.max_buf_size = 20 << 20; // 20MB
+    opt.max_buf_size = 0; // no limit
     opt.idle_timeout_ms = 30000;
     opt.messages_in_batch = 128;
     opt.handler = &_handler;
