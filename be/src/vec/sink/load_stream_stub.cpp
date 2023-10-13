@@ -232,6 +232,8 @@ Status LoadStreamStub::_send_with_buffer(butil::IOBuf& buf, bool eos) {
     return _send_with_retry(output);
 }
 
+static bvar::LatencyRecorder g_stream_rpc_latency("stream_rpc_latency");
+
 Status LoadStreamStub::_send_with_retry(butil::IOBuf& buf) {
     for (;;) {
         int ret;
@@ -243,11 +245,16 @@ Status LoadStreamStub::_send_with_retry(butil::IOBuf& buf) {
         case 0:
             return Status::OK();
         case EAGAIN: {
-            const timespec time = butil::seconds_from_now(60);
-            int wait_ret = brpc::StreamWait(_stream_id, &time);
-            if (wait_ret != 0) {
-                return Status::InternalError("StreamWait failed, err = ", wait_ret);
+            int64_t duration_ns = 0;
+            {
+                SCOPED_RAW_TIMER(&duration_ns);
+                const timespec time = butil::seconds_from_now(60);
+                int wait_ret = brpc::StreamWait(_stream_id, &time);
+                if (wait_ret != 0) {
+                    return Status::InternalError("StreamWait failed, err = ", wait_ret);
+                }
             }
+            g_stream_rpc_latency << duration_ns / 1000;
             break;
         }
         default:
