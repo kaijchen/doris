@@ -86,10 +86,6 @@ void MemTableMemoryLimiter::handle_memtable_flush() {
         while (_should_wait_flush) {
             _wait_flush_cond.wait(l);
         }
-        LOG(INFO) << "Reached the one tenth of load hard limit " << _load_hard_mem_limit / 10
-                  << "and process remaining allocator cache " << proc_mem_no_allocator_cache
-                  << "reached process soft memory limit " << process_soft_mem_limit
-                  << ", waited for flush, time_ns:" << timer.elapsed_time();
 #ifndef BE_TEST
         bool hard_limit_reached = _mem_tracker->consumption() >= _load_hard_mem_limit ||
                                   proc_mem_no_allocator_cache >= process_soft_mem_limit;
@@ -99,6 +95,14 @@ void MemTableMemoryLimiter::handle_memtable_flush() {
             return;
         }
 #endif
+        LOG(INFO) << "Reached the one tenth of load hard limit " << _load_hard_mem_limit / 10
+                  << "and process remaining allocator cache " << proc_mem_no_allocator_cache
+                  << "reached process soft memory limit " << process_soft_mem_limit
+                  << ", waited for flush, time_ns:" << timer.elapsed_time()
+                  << ", memtable count: " << _num_memtables
+                  << ", mem usage: " << PrettyPrinter::print_bytes(_mem_usage)
+                  << ", write usage: " << PrettyPrinter::print_bytes(_write_mem_usage)
+                  << ", flush usage: " << PrettyPrinter::print_bytes(_flush_mem_usage);
 
         auto cmp = [](WriterMemItem& lhs, WriterMemItem& rhs) {
             return lhs.mem_size < rhs.mem_size;
@@ -216,9 +220,15 @@ void MemTableMemoryLimiter::handle_memtable_flush() {
 
 void MemTableMemoryLimiter::_refresh_mem_tracker_without_lock() {
     _mem_usage = 0;
+    _flush_mem_usage = 0;
+    _write_mem_usage = 0;
+    _num_memtables = 0;
     for (auto it = _writers.begin(); it != _writers.end();) {
         if (auto writer = it->lock()) {
             _mem_usage += writer->mem_consumption(MemType::ALL);
+            _flush_mem_usage += writer->mem_consumption(MemType::FLUSH);
+            _write_mem_usage += writer->mem_consumption(MemType::WRITE);
+            _num_memtables++;
             ++it;
         } else {
             *it = std::move(_writers.back());

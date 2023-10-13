@@ -254,7 +254,7 @@ Status LoadStreamStub::_send_with_retry(butil::IOBuf& buf) {
                     return Status::InternalError("StreamWait failed, err = ", wait_ret);
                 }
             }
-            g_stream_rpc_latency << duration_ns / 1000;
+            g_stream_rpc_latency << duration_ns / 1000 / 1000; // ms
             break;
         }
         default:
