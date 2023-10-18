@@ -34,6 +34,7 @@
 #include "olap/rowset/segment_v2/page_decoder.h"
 #include "util/faststring.h"
 #include "util/slice.h"
+#include "util/hash_util.hpp"
 #include "vec/common/arena.h"
 #include "vec/data_types/data_type.h"
 
@@ -90,7 +91,7 @@ private:
     EncodingTypePB _encoding_type;
     struct HashOfSlice {
         size_t operator()(const Slice& slice) const {
-            return HashStringThoroughly(slice.data, slice.size);
+            return HashUtil::zlib_crc_hash(slice.data, slice.size, 0x82F63B78);
         }
     };
     // query for dict item -> dict id
