@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <butil/fast_rand.h>
 #include <gen_cpp/Descriptors_types.h>
 #include <gen_cpp/descriptors.pb.h>
 
@@ -33,6 +34,8 @@
 
 #include "common/object_pool.h"
 #include "common/status.h"
+#include "runtime/descriptors.h"
+#include "runtime/raw_value.h"
 #include "vec/columns/column.h"
 #include "vec/core/block.h"
 #include "vec/core/column_with_type_and_name.h"
@@ -164,7 +167,61 @@ public:
     // return true if we found this block_row in partition
     bool find_partition(BlockRow* block_row, const VOlapTablePartition** partition) const;
 
+    ALWAYS_INLINE bool find_partition(vectorized::Block* block, int row,
+                                      VOlapTablePartition*& partition) const {
+        auto it = _is_in_partition ? _partitions_map->find(std::tuple {block, row, true})
+                                   : _partitions_map->upper_bound(std::tuple {block, row, true});
+        // for list partition it might result in default partition
+        if (_is_in_partition) {
+            partition = (it != _partitions_map->end()) ? it->second : _default_partition;
+            it = _partitions_map->end();
+        }
+        if (it != _partitions_map->end() &&
+            _part_contains(it->second, std::tuple {block, row, true})) {
+            partition = it->second;
+        }
+        return (partition != nullptr);
+    }
+
     uint32_t find_tablet(BlockRow* block_row, const VOlapTablePartition& partition) const;
+
+    ALWAYS_INLINE void find_tablets(vectorized::Block* block, const std::vector<uint32_t>& indexes,
+                                    const std::vector<VOlapTablePartition*>& partitions,
+                                    std::vector<uint32_t>& tablet_indexes /*result*/) const {
+        std::function<uint32_t(vectorized::Block*, uint32_t, const VOlapTablePartition&)>
+                compute_function;
+        if (!has_distribute_col) {
+            compute_function = [](vectorized::Block* block, uint32_t row,
+                                  const VOlapTablePartition& partition) -> uint32_t {
+                if (partition.load_tablet_idx == -1) {
+                    // load_to_single_tablet = false, just do random
+                    return butil::fast_rand() % partition.num_buckets;
+                }
+                // load_to_single_tablet = ture, do round-robin
+                return partition.load_tablet_idx % partition.num_buckets;
+            };
+        } else {
+            compute_function = [this](vectorized::Block* block, uint32_t row,
+                                      const VOlapTablePartition& partition) -> uint32_t {
+                uint32_t hash_val = 0;
+                for (unsigned short _distributed_slot_loc : _distributed_slot_locs) {
+                    auto* slot_desc = _slots[_distributed_slot_loc];
+                    auto& column = block->get_by_position(_distributed_slot_loc).column;
+                    auto val = column->get_data_at(row);
+                    if (val.data != nullptr) {
+                        hash_val = RawValue::zlib_crc32(val.data, val.size, slot_desc->type().type,
+                                                        hash_val);
+                    } else {
+                        hash_val = HashUtil::zlib_crc_hash_null(hash_val);
+                    }
+                }
+                return hash_val % partition.num_buckets;
+            };
+        }
+        for (auto index : indexes) {
+            tablet_indexes[index] = compute_function(block, index, *partitions[index]);
+        }
+    }
 
     const std::vector<VOlapTablePartition*>& get_partitions() const { return _partitions; }
 
@@ -206,6 +263,7 @@ private:
     std::vector<uint16_t> _partition_slot_locs;
     std::vector<uint16_t> _transformed_slot_locs;
     std::vector<uint16_t> _distributed_slot_locs;
+    bool has_distribute_col;
 
     ObjectPool _obj_pool;
     vectorized::Block _partition_block;

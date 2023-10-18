@@ -554,9 +554,13 @@ private:
 
     Status _init(RuntimeState* state, RuntimeProfile* profile);
     // payload for each row
-    void _generate_row_distribution_payload(ChannelDistributionPayload& payload,
+    void _generate_row_distribution_payload(ChannelDistributionPayload& channel_to_payload,
                                             const VOlapTablePartition* partition,
                                             uint32_t tablet_index, int row_idx, size_t row_cnt);
+    void _generate_row_distribution_payload_v2(ChannelDistributionPayload& channel_to_payload,
+                                               const std::vector<VOlapTablePartition*>& partitions,
+                                               const std::vector<uint32_t>& tablet_indexes,
+                                               const std::vector<bool>& skip, size_t row_cnt);
     Status _single_partition_generate(RuntimeState* state, vectorized::Block* block,
                                       ChannelDistributionPayload& channel_to_payload,
                                       size_t num_rows, bool has_filtered_rows);

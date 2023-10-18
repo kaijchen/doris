@@ -42,6 +42,7 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "olap/wal_manager.h"
 #include "util/runtime_profile.h"
@@ -418,7 +419,6 @@ Status VNodeChannel::open_wait() {
                 ExecEnv::GetInstance()->brpc_internal_client_cache()->erase(
                         open_closure->cntl.remote_side());
             }
-
             _cancelled = true;
             auto error_code = open_closure->cntl.ErrorCode();
             auto error_text = open_closure->cntl.ErrorText();
@@ -1313,6 +1313,55 @@ Status VTabletWriter::_incremental_open_node_channel(
     return Status::OK();
 }
 
+// Generate channel payload for sinking data to differenct node channel
+// Payload = std::pair<std::unique_ptr<vectorized::IColumn::Selector>, std::vector<int64_t>>;
+//   first = row_id, second = vector<tablet_id>
+ALWAYS_INLINE void VTabletWriter::_generate_row_distribution_payload_v2(
+        ChannelDistributionPayload& channel_to_payload,
+        const std::vector<VOlapTablePartition*>& partitions,
+        const std::vector<uint32_t>& tablet_indexes, const std::vector<bool>& skip,
+        size_t row_cnt) {
+    for (int row_idx = 0; row_idx < row_cnt; row_idx++) {
+        if (skip[row_idx]) {
+            continue;
+        }
+        auto& partition = partitions[row_idx];
+        auto& tablet_index = tablet_indexes[row_idx];
+
+        for (int index_num = 0; index_num < partition->indexes.size();
+             ++index_num) { // partition->indexes = [index, tablets...]
+
+            auto tablet_id = partition->indexes[index_num].tablets[tablet_index];
+            auto it = _channels[index_num]->_channels_by_tablet.find(
+                    tablet_id); // (tablet_id, VNodeChannel) where this tablet locate
+            std::vector<std::shared_ptr<VNodeChannel>>& tablet_locations = it->second;
+
+            DCHECK(it != _channels[index_num]->_channels_by_tablet.end())
+                    << "unknown tablet, tablet_id=" << tablet_index;
+
+            std::unordered_map<VNodeChannel*, Payload>& payloads_this_index =
+                    channel_to_payload[index_num]; // payloads of this index in every node
+
+            for (const auto& locate_node : tablet_locations) {
+                auto payload_it =
+                        payloads_this_index.find(locate_node.get()); // <VNodeChannel*, Payload>
+                if (payload_it == payloads_this_index.end()) {
+                    auto [tmp_it, _] = payloads_this_index.emplace(
+                            locate_node.get(),
+                            Payload {std::make_unique<vectorized::IColumn::Selector>(),
+                                     std::vector<int64_t>()});
+                    payload_it = tmp_it;
+                    payload_it->second.first->reserve(row_cnt);
+                    payload_it->second.second.reserve(row_cnt);
+                }
+                payload_it->second.first->push_back(row_idx);
+                payload_it->second.second.push_back(tablet_id);
+            }
+            _number_output_rows++;
+        }
+    }
+}
+
 void VTabletWriter::_generate_row_distribution_payload(
         ChannelDistributionPayload& channel_to_payload, const VOlapTablePartition* partition,
         uint32_t tablet_index, int row_idx, size_t row_cnt) {
@@ -1677,7 +1726,7 @@ Status VTabletWriter::append_block(doris::vectorized::Block& input_block) {
     SCOPED_RAW_TIMER(&_send_data_ns);
     // This is just for passing compilation.
     bool stop_processing = false;
-    std::vector<std::unordered_map<VNodeChannel*, Payload>> channel_to_payload;
+    ChannelDistributionPayload channel_to_payload;
     channel_to_payload.resize(_channels.size());
     _tablet_finder->clear_for_new_batch();
     _row_distribution_watch.start();
@@ -1760,23 +1809,23 @@ Status VTabletWriter::append_block(doris::vectorized::Block& input_block) {
                 return Status::NeedSendAgain("");
             }    // creating done
         } else { // not auto partition
-            for (int i = 0; i < num_rows; ++i) {
-                if (UNLIKELY(has_filtered_rows) && _block_convertor->filter_map()[i]) {
-                    continue;
+            std::vector<VOlapTablePartition*> partitions {num_rows, nullptr};
+            std::vector<bool> skip;
+            skip.resize(num_rows);
+            std::vector<uint32_t> tablet_indexes;
+            tablet_indexes.resize(num_rows);
+
+            RETURN_IF_ERROR(_tablet_finder->find_tablet_v2(_state, block.get(), num_rows,
+                                                           partitions, tablet_indexes,
+                                                           stop_processing, skip));
+
+            if (has_filtered_rows) {
+                for (int i = 0; i < num_rows; i++) {
+                    skip[i] = skip[i] || _block_convertor->filter_map()[i];
                 }
-                const VOlapTablePartition* partition = nullptr;
-                bool is_continue = false;
-                uint32_t tablet_index = 0;
-                RETURN_IF_ERROR(_tablet_finder->find_tablet(_state, block.get(), i, &partition,
-                                                            tablet_index, stop_processing,
-                                                            is_continue));
-                if (is_continue) {
-                    continue;
-                }
-                // each row
-                _generate_row_distribution_payload(channel_to_payload, partition, tablet_index, i,
-                                                   1);
             }
+            _generate_row_distribution_payload_v2(channel_to_payload, partitions, tablet_indexes,
+                                                  skip, num_rows);
         }
     }
     _row_distribution_watch.stop();

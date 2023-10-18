@@ -99,4 +99,78 @@ Status OlapTabletFinder::find_tablet(RuntimeState* state, Block* block, int row_
     return status;
 }
 
+Status OlapTabletFinder::find_tablet_v2(RuntimeState* state, Block* block, int rows,
+                                        std::vector<VOlapTablePartition*>& partitions,
+                                        std::vector<uint32_t>& tablet_index, bool& stop_processing,
+                                        std::vector<bool>& skip,
+                                        std::vector<bool>* missing_partition) {
+    Status status = Status::OK();
+    for (int index = 0; index < rows; index++) {
+        _vpartition->find_partition(block, index, partitions[index]);
+    }
+    std::vector<uint32_t> indexes;
+    indexes.reserve(rows);
+    for (int row_index = 0; row_index < rows; row_index++) {
+        if (partitions[row_index] == nullptr) [[unlikely]] {
+            if (missing_partition != nullptr) { // auto partition table
+                (*missing_partition)[row_index] =
+                        true; //TODO: make sure this order of judgement is best
+            } else {
+                RETURN_IF_ERROR(state->append_error_msg_to_file(
+                        []() -> std::string { return ""; },
+                        [&]() -> std::string {
+                            fmt::memory_buffer buf;
+                            fmt::format_to(buf, "no partition for this tuple. tuple=\n{}",
+                                           block->dump_data(row_index, 1));
+                            return fmt::to_string(buf);
+                        },
+                        &stop_processing));
+                _num_filtered_rows++;
+                _filter_bitmap.Set(row_index, true);
+                if (stop_processing) {
+                    return Status::EndOfFile("Encountered unqualified data, stop processing");
+                }
+                skip[row_index] = true;
+                continue;
+            }
+        }
+        if (!partitions[row_index]->is_mutable) [[unlikely]] {
+            _num_immutable_partition_filtered_rows++;
+            skip[row_index] = true;
+            continue;
+        }
+        if (partitions[row_index]->num_buckets <= 0) [[unlikely]] {
+            std::stringstream ss;
+            ss << "num_buckets must be greater than 0, num_buckets="
+               << partitions[row_index]->num_buckets;
+            return Status::InternalError(ss.str());
+        }
+
+        _partition_ids.emplace(partitions[row_index]->id);
+
+        if (_find_tablet_mode != FindTabletMode::FIND_TABLET_EVERY_ROW) {
+            //TODO: opt this. save the buffer map in find_tablet
+            if (_partition_to_tablet_map.find(partitions[row_index]->id) ==
+                _partition_to_tablet_map.end()) {
+                BlockRow block_row = {block, row_index};
+                tablet_index[row_index] =
+                        _vpartition->find_tablet(&block_row, *partitions[row_index]);
+                _partition_to_tablet_map.emplace(partitions[row_index]->id,
+                                                 tablet_index[row_index]);
+            } else {
+                tablet_index[row_index] = _partition_to_tablet_map[partitions[row_index]->id];
+            }
+        } else {
+            // save it. find in batchwise.
+            indexes.push_back(row_index);
+        }
+    }
+
+    if (_find_tablet_mode == FindTabletMode::FIND_TABLET_EVERY_ROW) {
+        _vpartition->find_tablets(block, indexes, partitions, tablet_index);
+    }
+
+    return status;
+}
+
 } // namespace doris::vectorized

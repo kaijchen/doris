@@ -17,7 +17,6 @@
 
 #include "exec/tablet_info.h"
 
-#include <butil/fast_rand.h>
 #include <gen_cpp/Descriptors_types.h>
 #include <gen_cpp/Exprs_types.h>
 #include <gen_cpp/Types_types.h>
@@ -324,6 +323,7 @@ Status VOlapTablePartitionParam::init() {
         }
     }
     if (_distributed_slot_locs.empty()) {
+        has_distribute_col = false;
         _compute_tablet_index = [](BlockRow* key,
                                    const VOlapTablePartition& partition) -> uint32_t {
             if (partition.load_tablet_idx == -1) {
@@ -334,6 +334,7 @@ Status VOlapTablePartitionParam::init() {
             return partition.load_tablet_idx % partition.num_buckets;
         };
     } else {
+        has_distribute_col = true;
         _compute_tablet_index = [this](BlockRow* key,
                                        const VOlapTablePartition& partition) -> uint32_t {
             uint32_t hash_val = 0;

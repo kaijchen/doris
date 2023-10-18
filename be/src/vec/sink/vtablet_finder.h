@@ -18,10 +18,12 @@
 #pragma once
 
 #include <map>
+#include <unordered_set>
 
 #include "common/status.h"
 #include "exec/tablet_info.h"
 #include "util/bitmap.h"
+#include "vec/common/hash_table/phmap_fwd_decl.h"
 #include "vec/core/block.h"
 
 namespace doris::vectorized {
@@ -43,6 +45,12 @@ public:
                        const VOlapTablePartition** partition, uint32_t& tablet_index,
                        bool& filtered, bool& is_continue, bool* missing_partition = nullptr);
 
+    Status find_tablet_v2(RuntimeState* state, vectorized::Block* block, int rows,
+                          std::vector<VOlapTablePartition*>& partitions,
+                          std::vector<uint32_t>& tablet_index, bool& filtered,
+                          std::vector<bool>& is_continue,
+                          std::vector<bool>* missing_partition = nullptr);
+
     bool is_find_tablet_every_sink() {
         return _find_tablet_mode == FindTabletMode::FIND_TABLET_EVERY_SINK;
     }
@@ -55,7 +63,7 @@ public:
 
     bool is_single_tablet() { return _partition_to_tablet_map.size() == 1; }
 
-    const std::set<int64_t>& partition_ids() { return _partition_ids; }
+    const vectorized::flat_hash_set<int64_t>& partition_ids() { return _partition_ids; }
 
     int64_t num_filtered_rows() const { return _num_filtered_rows; }
 
@@ -69,7 +77,7 @@ private:
     VOlapTablePartitionParam* _vpartition;
     FindTabletMode _find_tablet_mode;
     std::map<int64_t, int64_t> _partition_to_tablet_map;
-    std::set<int64_t> _partition_ids;
+    vectorized::flat_hash_set<int64_t> _partition_ids;
 
     int64_t _num_filtered_rows = 0;
     int64_t _num_immutable_partition_filtered_rows = 0;
