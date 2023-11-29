@@ -56,7 +56,7 @@ public class ProfileTreeBuilder {
     private static final String PROFILE_NAME_VDATA_STREAM_SENDER = "VDataStreamSender";
     private static final String PROFILE_NAME_DATA_BUFFER_SENDER = "DataBufferSender";
     private static final String PROFILE_NAME_VDATA_BUFFER_SENDER = "VDataBufferSender";
-    private static final String PROFILE_NAME_OLAP_TABLE_SINK = "OlapTableSink";
+    private static final String PROFILE_NAME_OLAP_TABLE_SINK = "VOlapTableSink";
     private static final String PROFILE_NAME_BLOCK_MGR = "BlockMgr";
     private static final String PROFILE_NAME_BUFFER_POOL = "Buffer pool";
     private static final String PROFILE_NAME_EXCHANGE_NODE = "EXCHANGE_NODE";

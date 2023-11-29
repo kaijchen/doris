@@ -391,15 +391,15 @@ Status VTabletWriterV2::append_block(Block& input_block) {
 
     _row_distribution_watch.stop();
 
+    g_sink_v2_write_bytes << block->bytes();
+    g_sink_v2_write_rows << block->rows();
+
     // For each tablet, send its input_rows from block to delta writer
     for (const auto& [tablet_id, rows] : rows_for_tablet) {
         Streams streams;
         RETURN_IF_ERROR(_select_streams(tablet_id, rows.partition_id, rows.index_id, streams));
         RETURN_IF_ERROR(_write_memtable(block, tablet_id, rows, streams));
     }
-
-    g_sink_v2_write_bytes << block->bytes();
-    g_sink_v2_write_rows << block->rows();
 
     return Status::OK();
 }
