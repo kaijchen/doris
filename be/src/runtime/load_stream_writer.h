@@ -78,7 +78,7 @@ private:
     WriteRequest _req;
     std::unique_ptr<BaseRowsetBuilder> _rowset_builder;
     std::shared_ptr<RowsetWriter> _rowset_writer;
-    std::mutex _lock;
+    bthread::Mutex _lock;
 
     std::unordered_map<uint32_t /*segid*/, SegmentStatisticsSharedPtr> _segment_stat_map;
     std::mutex _segment_stat_map_lock;
