@@ -64,7 +64,7 @@ public:
         std::stringstream title;
         title << _name << " (frag_id=" << state->fragment_instance_id() << ")";
         // create profile
-        _profile = state->obj_pool()->add(new RuntimeProfile(title.str()));
+        _profile = state->obj_pool()->add(new RuntimeProfile(_name));
         init_sink_common_profile();
         return Status::OK();
     }
