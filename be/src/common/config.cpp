@@ -568,6 +568,8 @@ DEFINE_mInt32(memory_gc_sleep_time_ms, "1000");
 
 // Sleep time in milliseconds between memtbale flush mgr refresh iterations
 DEFINE_mInt64(memtable_mem_tracker_refresh_interval_ms, "5");
+DEFINE_mDouble(memtable_hard_limit_active_ratio, 0.5);
+DEFINE_mDouble(memtable_soft_limit_active_ratio, 0.5);
 
 // Alignment
 DEFINE_Int32(memory_max_alignment, "16");

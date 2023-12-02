@@ -623,6 +623,8 @@ DECLARE_mInt32(memory_gc_sleep_time_ms);
 
 // Sleep time in milliseconds between memtbale flush mgr memory refresh iterations
 DECLARE_mInt64(memtable_mem_tracker_refresh_interval_ms);
+DECLARE_mDouble(memtable_hard_limit_active_ratio);
+DECLARE_mDouble(memtable_soft_limit_active_ratio);
 
 // Alignment
 DECLARE_Int32(memory_max_alignment);

@@ -104,7 +104,7 @@ void MemTableMemoryLimiter::handle_memtable_flush() {
                       << " (active: " << PrettyPrinter::print_bytes(_active_mem_usage)
                       << ", write: " << PrettyPrinter::print_bytes(_write_mem_usage)
                       << ", flush: " << PrettyPrinter::print_bytes(_flush_mem_usage) << ")";
-            if (_active_mem_usage >= _write_mem_usage * 0.8) {
+            if (_active_mem_usage >= _write_mem_usage * config::memtable_hard_limit_active_ratio) {
                 _flush_active_memtables();
             }
             auto st = _hard_limit_end_cond.wait_for(l, std::chrono::milliseconds(1000));
@@ -117,7 +117,7 @@ void MemTableMemoryLimiter::handle_memtable_flush() {
                       << " (active: " << PrettyPrinter::print_bytes(_active_mem_usage)
                       << ", write: " << PrettyPrinter::print_bytes(_write_mem_usage)
                       << ", flush: " << PrettyPrinter::print_bytes(_flush_mem_usage) << ")";
-            if (_active_mem_usage >= _write_mem_usage * 0.8) {
+            if (_active_mem_usage >= _write_mem_usage * config::memtable_soft_limit_active_ratio) {
                 _flush_active_memtables();
             }
         }
