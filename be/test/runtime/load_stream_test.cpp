@@ -323,7 +323,7 @@ public:
         int on_received_messages(StreamId id, butil::IOBuf* const messages[],
                                  size_t size) override {
             for (size_t i = 0; i < size; i++) {
-                PWriteStreamSinkResponse response;
+                PLoadStreamResponse response;
                 butil::IOBufAsZeroCopyInputStream wrapper(*messages[i]);
                 response.ParseFromZeroCopyStream(&wrapper);
                 LOG(INFO) << "response " << response.DebugString();

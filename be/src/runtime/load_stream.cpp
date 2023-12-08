@@ -341,7 +341,7 @@ void LoadStream::_report_result(StreamId stream, const Status& st,
     LOG(INFO) << "report result " << *this << ", success tablet num " << success_tablet_ids.size()
               << ", failed tablet num " << failed_tablet_ids.size();
     butil::IOBuf buf;
-    PWriteStreamSinkResponse response;
+    PLoadStreamResponse response;
     st.to_protobuf(response.mutable_status());
     for (auto& id : success_tablet_ids) {
         response.add_success_tablet_ids(id);
@@ -376,7 +376,7 @@ void LoadStream::_report_result(StreamId stream, const Status& st,
 
 void LoadStream::_report_schema(StreamId stream, const PLoadStreamHeader& hdr) {
     butil::IOBuf buf;
-    PWriteStreamSinkResponse response;
+    PLoadStreamResponse response;
     Status st = Status::OK();
     for (const auto& req : hdr.tablets()) {
         TabletManager* tablet_mgr = StorageEngine::instance()->tablet_manager();

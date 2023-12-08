@@ -765,7 +765,7 @@ message POpenLoadStreamResponse {
     repeated PTabletSchemaWithIndex tablet_schemas = 2;
 }
 
-message PWriteStreamSinkResponse {
+message PLoadStreamResponse {
     optional PStatus status = 1;
     repeated int64 success_tablet_ids = 2;
     repeated int64 failed_tablet_ids = 3;

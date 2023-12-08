@@ -32,7 +32,7 @@ int LoadStreamStub::LoadStreamReplyHandler::on_received_messages(brpc::StreamId 
                                                                  size_t size) {
     for (size_t i = 0; i < size; i++) {
         butil::IOBufAsZeroCopyInputStream wrapper(*messages[i]);
-        PWriteStreamSinkResponse response;
+        PLoadStreamResponse response;
         response.ParseFromZeroCopyStream(&wrapper);
 
         Status st = Status::create(response.status());
