@@ -44,8 +44,8 @@ public:
 
     Status init(OlapTableSchemaParam* schema, int64_t index_id, int64_t partition_id);
 
-    Status append_data(const PStreamHeader& header, butil::IOBuf* data);
-    Status add_segment(const PStreamHeader& header, butil::IOBuf* data);
+    Status append_data(const PLoadStreamHeader& header, butil::IOBuf* data);
+    Status add_segment(const PLoadStreamHeader& header, butil::IOBuf* data);
     Status close();
     int64_t id() { return _id; }
 
@@ -75,7 +75,7 @@ public:
                 std::shared_ptr<OlapTableSchemaParam> schema, LoadStreamMgr* load_stream_mgr,
                 RuntimeProfile* profile);
 
-    Status append_data(const PStreamHeader& header, butil::IOBuf* data);
+    Status append_data(const PLoadStreamHeader& header, butil::IOBuf* data);
 
     Status close(const std::vector<PTabletID>& tablets_to_commit,
                  std::vector<int64_t>* success_tablet_ids, std::vector<int64_t>* failed_tablet_ids);
@@ -123,17 +123,17 @@ public:
     friend std::ostream& operator<<(std::ostream& ostr, const LoadStream& load_stream);
 
 private:
-    void _parse_header(butil::IOBuf* const message, PStreamHeader& hdr);
-    void _dispatch(StreamId id, const PStreamHeader& hdr, butil::IOBuf* data);
-    Status _append_data(const PStreamHeader& header, butil::IOBuf* data);
+    void _parse_header(butil::IOBuf* const message, PLoadStreamHeader& hdr);
+    void _dispatch(StreamId id, const PLoadStreamHeader& hdr, butil::IOBuf* data);
+    Status _append_data(const PLoadStreamHeader& header, butil::IOBuf* data);
 
     void _report_result(StreamId stream, const Status& st,
                         const std::vector<int64_t>& success_tablet_ids,
                         const std::vector<int64_t>& failed_tablet_ids);
-    void _report_schema(StreamId stream, const PStreamHeader& hdr);
+    void _report_schema(StreamId stream, const PLoadStreamHeader& hdr);
 
     // report failure for one message
-    void _report_failure(StreamId stream, const Status& status, const PStreamHeader& header) {
+    void _report_failure(StreamId stream, const Status& status, const PLoadStreamHeader& header) {
         std::vector<int64_t> success; // empty
         std::vector<int64_t> failure;
         if (header.has_tablet_id()) {

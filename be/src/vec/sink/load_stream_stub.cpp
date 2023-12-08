@@ -187,7 +187,7 @@ Status LoadStreamStub::open(BrpcClientCache<PBackendService_Stub>* client_cache,
 Status LoadStreamStub::append_data(int64_t partition_id, int64_t index_id, int64_t tablet_id,
                                    int64_t segment_id, std::span<const Slice> data,
                                    bool segment_eos) {
-    PStreamHeader header;
+    PLoadStreamHeader header;
     header.set_src_id(_src_id);
     *header.mutable_load_id() = _load_id;
     header.set_partition_id(partition_id);
@@ -195,7 +195,7 @@ Status LoadStreamStub::append_data(int64_t partition_id, int64_t index_id, int64
     header.set_tablet_id(tablet_id);
     header.set_segment_id(segment_id);
     header.set_segment_eos(segment_eos);
-    header.set_opcode(doris::PStreamHeader::APPEND_DATA);
+    header.set_opcode(doris::PLoadStreamHeader::APPEND_DATA);
     return _encode_and_send(header, data);
 }
 
@@ -203,14 +203,14 @@ Status LoadStreamStub::append_data(int64_t partition_id, int64_t index_id, int64
 Status LoadStreamStub::add_segment(int64_t partition_id, int64_t index_id, int64_t tablet_id,
                                    int64_t segment_id, const SegmentStatistics& segment_stat,
                                    TabletSchemaSPtr flush_schema) {
-    PStreamHeader header;
+    PLoadStreamHeader header;
     header.set_src_id(_src_id);
     *header.mutable_load_id() = _load_id;
     header.set_partition_id(partition_id);
     header.set_index_id(index_id);
     header.set_tablet_id(tablet_id);
     header.set_segment_id(segment_id);
-    header.set_opcode(doris::PStreamHeader::ADD_SEGMENT);
+    header.set_opcode(doris::PLoadStreamHeader::ADD_SEGMENT);
     segment_stat.to_pb(header.mutable_segment_statistics());
     if (flush_schema != nullptr) {
         flush_schema->to_schema_pb(header.mutable_flush_schema());
@@ -228,10 +228,10 @@ Status LoadStreamStub::close_load(const std::vector<PTabletID>& tablets_to_commi
     if (--_use_cnt > 0) {
         return Status::OK();
     }
-    PStreamHeader header;
+    PLoadStreamHeader header;
     *header.mutable_load_id() = _load_id;
     header.set_src_id(_src_id);
-    header.set_opcode(doris::PStreamHeader::CLOSE_LOAD);
+    header.set_opcode(doris::PLoadStreamHeader::CLOSE_LOAD);
     {
         std::lock_guard<std::mutex> lock(_tablets_to_commit_mutex);
         for (const auto& tablet : _tablets_to_commit) {
@@ -243,10 +243,10 @@ Status LoadStreamStub::close_load(const std::vector<PTabletID>& tablets_to_commi
 
 // GET_SCHEMA
 Status LoadStreamStub::get_schema(const std::vector<PTabletID>& tablets) {
-    PStreamHeader header;
+    PLoadStreamHeader header;
     *header.mutable_load_id() = _load_id;
     header.set_src_id(_src_id);
-    header.set_opcode(doris::PStreamHeader::CLOSE_LOAD);
+    header.set_opcode(doris::PLoadStreamHeader::CLOSE_LOAD);
     std::ostringstream oss;
     oss << "fetching tablet schema from stream " << _stream_id
         << ", load id: " << print_id(_load_id) << ", tablet id:";
@@ -297,7 +297,7 @@ Status LoadStreamStub::wait_for_schema(int64_t partition_id, int64_t index_id, i
     return Status::OK();
 }
 
-Status LoadStreamStub::_encode_and_send(PStreamHeader& header, std::span<const Slice> data) {
+Status LoadStreamStub::_encode_and_send(PLoadStreamHeader& header, std::span<const Slice> data) {
     butil::IOBuf buf;
     size_t header_len = header.ByteSizeLong();
     buf.append(reinterpret_cast<uint8_t*>(&header_len), sizeof(header_len));
@@ -308,8 +308,8 @@ Status LoadStreamStub::_encode_and_send(PStreamHeader& header, std::span<const S
     for (const auto& slice : data) {
         buf.append(slice.get_data(), slice.get_size());
     }
-    bool eos = header.opcode() == doris::PStreamHeader::CLOSE_LOAD;
-    bool get_schema = header.opcode() == doris::PStreamHeader::GET_SCHEMA;
+    bool eos = header.opcode() == doris::PLoadStreamHeader::CLOSE_LOAD;
+    bool get_schema = header.opcode() == doris::PLoadStreamHeader::GET_SCHEMA;
     return _send_with_buffer(buf, eos || get_schema);
 }
 

@@ -225,7 +225,7 @@ public:
     int64_t dst_id() const { return _dst_id; }
 
 private:
-    Status _encode_and_send(PStreamHeader& header, std::span<const Slice> data = {});
+    Status _encode_and_send(PLoadStreamHeader& header, std::span<const Slice> data = {});
     Status _send_with_buffer(butil::IOBuf& buf, bool sync = false);
     Status _send_with_retry(butil::IOBuf& buf);
 

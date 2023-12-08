@@ -82,13 +82,13 @@ Status TabletStream::init(OlapTableSchemaParam* schema, int64_t index_id, int64_
     return st;
 }
 
-Status TabletStream::append_data(const PStreamHeader& header, butil::IOBuf* data) {
+Status TabletStream::append_data(const PLoadStreamHeader& header, butil::IOBuf* data) {
     if (!_failed_st->ok()) {
         return *_failed_st;
     }
 
     // dispatch add_segment request
-    if (header.opcode() == PStreamHeader::ADD_SEGMENT) {
+    if (header.opcode() == PLoadStreamHeader::ADD_SEGMENT) {
         return add_segment(header, data);
     }
 
@@ -139,7 +139,7 @@ Status TabletStream::append_data(const PStreamHeader& header, butil::IOBuf* data
     return _flush_tokens[new_segid % _flush_tokens.size()]->submit_func(flush_func);
 }
 
-Status TabletStream::add_segment(const PStreamHeader& header, butil::IOBuf* data) {
+Status TabletStream::add_segment(const PLoadStreamHeader& header, butil::IOBuf* data) {
     SCOPED_TIMER(_add_segment_timer);
     DCHECK(header.has_segment_statistics());
     SegmentStatistics stat(header.segment_statistics());
@@ -197,7 +197,7 @@ IndexStream::IndexStream(PUniqueId load_id, int64_t id, int64_t txn_id,
     _close_wait_timer = ADD_TIMER(_profile, "CloseWaitTime");
 }
 
-Status IndexStream::append_data(const PStreamHeader& header, butil::IOBuf* data) {
+Status IndexStream::append_data(const PLoadStreamHeader& header, butil::IOBuf* data) {
     SCOPED_TIMER(_append_data_timer);
     int64_t tablet_id = header.tablet_id();
     TabletStreamSharedPtr tablet_stream;
@@ -374,7 +374,7 @@ void LoadStream::_report_result(StreamId stream, const Status& st,
     }
 }
 
-void LoadStream::_report_schema(StreamId stream, const PStreamHeader& hdr) {
+void LoadStream::_report_schema(StreamId stream, const PLoadStreamHeader& hdr) {
     butil::IOBuf buf;
     PWriteStreamSinkResponse response;
     Status st = Status::OK();
@@ -400,13 +400,13 @@ void LoadStream::_report_schema(StreamId stream, const PStreamHeader& hdr) {
     }
 }
 
-void LoadStream::_parse_header(butil::IOBuf* const message, PStreamHeader& hdr) {
+void LoadStream::_parse_header(butil::IOBuf* const message, PLoadStreamHeader& hdr) {
     butil::IOBufAsZeroCopyInputStream wrapper(*message);
     hdr.ParseFromZeroCopyStream(&wrapper);
     VLOG_DEBUG << "header parse result: " << hdr.DebugString();
 }
 
-Status LoadStream::_append_data(const PStreamHeader& header, butil::IOBuf* data) {
+Status LoadStream::_append_data(const PLoadStreamHeader& header, butil::IOBuf* data) {
     SCOPED_TIMER(_append_data_timer);
     IndexStreamSharedPtr index_stream;
 
@@ -448,7 +448,7 @@ int LoadStream::on_received_messages(StreamId id, butil::IOBuf* const messages[]
             size_t hdr_len = 0;
             messages[i]->cutn((void*)&hdr_len, sizeof(size_t));
             butil::IOBuf hdr_buf;
-            PStreamHeader hdr;
+            PLoadStreamHeader hdr;
             messages[i]->cutn(&hdr_buf, hdr_len);
             _parse_header(&hdr_buf, hdr);
 
@@ -456,7 +456,7 @@ int LoadStream::on_received_messages(StreamId id, butil::IOBuf* const messages[]
             size_t data_len = 0;
             messages[i]->cutn((void*)&data_len, sizeof(size_t));
             butil::IOBuf data_buf;
-            PStreamHeader data;
+            PLoadStreamHeader data;
             messages[i]->cutn(&data_buf, data_len);
 
             // step 3: dispatch
@@ -466,7 +466,7 @@ int LoadStream::on_received_messages(StreamId id, butil::IOBuf* const messages[]
     return 0;
 }
 
-void LoadStream::_dispatch(StreamId id, const PStreamHeader& hdr, butil::IOBuf* data) {
+void LoadStream::_dispatch(StreamId id, const PLoadStreamHeader& hdr, butil::IOBuf* data) {
     VLOG_DEBUG << PStreamHeader_Opcode_Name(hdr.opcode()) << " from " << hdr.src_id()
                << " with tablet " << hdr.tablet_id();
     if (UniqueId(hdr.load_id()) != UniqueId(_load_id)) {
@@ -487,14 +487,14 @@ void LoadStream::_dispatch(StreamId id, const PStreamHeader& hdr, butil::IOBuf* 
     }
 
     switch (hdr.opcode()) {
-    case PStreamHeader::ADD_SEGMENT: // ADD_SEGMENT will be dispatched inside TabletStream
-    case PStreamHeader::APPEND_DATA: {
+    case PLoadStreamHeader::ADD_SEGMENT: // ADD_SEGMENT will be dispatched inside TabletStream
+    case PLoadStreamHeader::APPEND_DATA: {
         auto st = _append_data(hdr, data);
         if (!st.ok()) {
             _report_failure(id, st, hdr);
         }
     } break;
-    case PStreamHeader::CLOSE_LOAD: {
+    case PLoadStreamHeader::CLOSE_LOAD: {
         std::vector<int64_t> success_tablet_ids;
         std::vector<int64_t> failed_tablet_ids;
         std::vector<PTabletID> tablets_to_commit(hdr.tablets().begin(), hdr.tablets().end());
@@ -502,7 +502,7 @@ void LoadStream::_dispatch(StreamId id, const PStreamHeader& hdr, butil::IOBuf* 
         _report_result(id, st, success_tablet_ids, failed_tablet_ids);
         brpc::StreamClose(id);
     } break;
-    case PStreamHeader::GET_SCHEMA: {
+    case PLoadStreamHeader::GET_SCHEMA: {
         _report_schema(id, hdr);
     } break;
     default:

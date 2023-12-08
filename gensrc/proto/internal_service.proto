@@ -773,7 +773,7 @@ message PWriteStreamSinkResponse {
     repeated PTabletSchemaWithIndex tablet_schemas = 5;
 }
 
-message PStreamHeader {
+message PLoadStreamHeader {
     enum Opcode {
         APPEND_DATA = 1;
         CLOSE_LOAD = 2;

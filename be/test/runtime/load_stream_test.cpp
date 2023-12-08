@@ -495,10 +495,10 @@ public:
 
     void close_load(MockSinkClient& client, uint32_t sender_id = NORMAL_SENDER_ID) {
         butil::IOBuf append_buf;
-        PStreamHeader header;
+        PLoadStreamHeader header;
         header.mutable_load_id()->set_hi(1);
         header.mutable_load_id()->set_lo(1);
-        header.set_opcode(PStreamHeader::CLOSE_LOAD);
+        header.set_opcode(PLoadStreamHeader::CLOSE_LOAD);
         header.set_src_id(sender_id);
         /* TODO: fix test with tablets_to_commit 
         PTabletID* tablets_to_commit = header.add_tablets();
@@ -517,8 +517,8 @@ public:
                           bool segment_eos) {
         // append data
         butil::IOBuf append_buf;
-        PStreamHeader header;
-        header.set_opcode(PStreamHeader::APPEND_DATA);
+        PLoadStreamHeader header;
+        header.set_opcode(PLoadStreamHeader::APPEND_DATA);
         header.mutable_load_id()->set_hi(load_id.hi);
         header.mutable_load_id()->set_lo(load_id.lo);
         header.set_index_id(index_id);
@@ -817,7 +817,7 @@ TEST_F(LoadStreamMgrTest, one_client_one_index_one_tablet_single_segment0_zero_b
 
     // append data
     butil::IOBuf append_buf;
-    PStreamHeader header;
+    PLoadStreamHeader header;
     std::string data;
     write_one_tablet(client, NORMAL_LOAD_ID, NORMAL_SENDER_ID, NORMAL_INDEX_ID, NORMAL_TABLET_ID, 0,
                      data, true);
@@ -858,7 +858,7 @@ TEST_F(LoadStreamMgrTest, one_client_one_index_one_tablet_single_segment0) {
 
     // append data
     butil::IOBuf append_buf;
-    PStreamHeader header;
+    PLoadStreamHeader header;
     std::string data = "file1 hello world 123 !@#$%^&*()_+";
     write_one_tablet(client, NORMAL_LOAD_ID, NORMAL_SENDER_ID, NORMAL_INDEX_ID, NORMAL_TABLET_ID, 0,
                      data, false);
@@ -904,7 +904,7 @@ TEST_F(LoadStreamMgrTest, one_client_one_index_one_tablet_single_segment_without
 
     // append data
     butil::IOBuf append_buf;
-    PStreamHeader header;
+    PLoadStreamHeader header;
     std::string data = "file1 hello world 123 !@#$%^&*()_+";
     write_one_tablet(client, NORMAL_LOAD_ID, NORMAL_SENDER_ID, NORMAL_INDEX_ID, NORMAL_TABLET_ID, 0,
                      data, false);
@@ -945,7 +945,7 @@ TEST_F(LoadStreamMgrTest, one_client_one_index_one_tablet_single_segment1) {
 
     // append data
     butil::IOBuf append_buf;
-    PStreamHeader header;
+    PLoadStreamHeader header;
     std::string data = "file1 hello world 123 !@#$%^&*()_+";
     write_one_tablet(client, NORMAL_LOAD_ID, NORMAL_SENDER_ID, NORMAL_INDEX_ID, NORMAL_TABLET_ID, 1,
                      data, false);
@@ -988,7 +988,7 @@ TEST_F(LoadStreamMgrTest, one_client_one_index_one_tablet_two_segment) {
 
     // append data
     butil::IOBuf append_buf;
-    PStreamHeader header;
+    PLoadStreamHeader header;
     std::string data1 = "file1 hello world 123 !@#$%^&*()_+1";
     write_one_tablet(client, NORMAL_LOAD_ID, NORMAL_SENDER_ID, NORMAL_INDEX_ID, NORMAL_TABLET_ID, 0,
                      data1, false);
@@ -1041,7 +1041,7 @@ TEST_F(LoadStreamMgrTest, one_client_one_index_three_tablet) {
 
     // append data
     butil::IOBuf append_buf;
-    PStreamHeader header;
+    PLoadStreamHeader header;
     std::string data1 = "file1 hello world 123 !@#$%^&*()_+1";
     write_one_tablet(client, NORMAL_LOAD_ID, NORMAL_SENDER_ID, NORMAL_INDEX_ID,
                      NORMAL_TABLET_ID + 0, 0, data1, true);
@@ -1109,7 +1109,7 @@ TEST_F(LoadStreamMgrTest, two_client_one_index_one_tablet_three_segment) {
         // append data
         for (int i = 0; i < 2; i++) {
             butil::IOBuf append_buf;
-            PStreamHeader header;
+            PLoadStreamHeader header;
             std::string data1 =
                     "sender_id=" + std::to_string(i) + ",segid=" + std::to_string(segid);
             write_one_tablet(clients[i], NORMAL_LOAD_ID, NORMAL_SENDER_ID + i, NORMAL_INDEX_ID,
