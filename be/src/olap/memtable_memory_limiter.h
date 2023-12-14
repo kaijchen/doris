@@ -50,7 +50,7 @@ public:
 
     MemTracker* active_mem_tracker() { return _active_mem_tracker.get(); }
 
-    MemTracker* insert_mem_tracker() { return _insert_mem_tracker.get(); }
+    MemTracker* write_mem_tracker() { return _write_mem_tracker.get(); }
 
     MemTracker* flush_mem_tracker() { return _flush_mem_tracker.get(); }
 
@@ -72,7 +72,7 @@ private:
 
     std::shared_ptr<MemTrackerLimiter> _mem_tracker;
     std::unique_ptr<MemTracker> _active_mem_tracker;
-    std::unique_ptr<MemTracker> _insert_mem_tracker;
+    std::unique_ptr<MemTracker> _write_mem_tracker;
     std::unique_ptr<MemTracker> _flush_mem_tracker;
     int64_t _load_hard_mem_limit = -1;
     int64_t _load_soft_mem_limit = -1;

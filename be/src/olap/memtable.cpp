@@ -159,7 +159,7 @@ MemTable::~MemTable() {
     THREAD_MEM_TRACKER_TRANSFER_TO(
             -_insert_mem_tracker->consumption() - _flush_mem_tracker->consumption(),
             limiter->mem_tracker());
-    limiter->insert_mem_tracker()->release(_insert_mem_tracker->consumption());
+    limiter->write_mem_tracker()->release(_insert_mem_tracker->consumption());
     limiter->flush_mem_tracker()->release(_flush_mem_tracker->consumption());
     limiter->active_mem_tracker()->release(_active_mem_usage);
 #endif
@@ -220,7 +220,7 @@ void MemTable::insert(const vectorized::Block* input_block, const std::vector<ui
     _mem_usage += input_size;
 #ifndef BE_TEST
     ExecEnv::GetInstance()->memtable_memory_limiter()->active_mem_tracker()->consume(input_size);
-    ExecEnv::GetInstance()->memtable_memory_limiter()->insert_mem_tracker()->consume(input_size);
+    ExecEnv::GetInstance()->memtable_memory_limiter()->write_mem_tracker()->consume(input_size);
     auto limiter = ExecEnv::GetInstance()->memtable_memory_limiter();
     THREAD_MEM_TRACKER_TRANSFER_TO(input_size, limiter->mem_tracker());
 #endif
@@ -464,7 +464,7 @@ void MemTable::_aggregate() {
         auto delta_mem = shrunked_after_agg - _mem_usage;
 #ifndef BE_TEST
         ExecEnv::GetInstance()->memtable_memory_limiter()->active_mem_tracker()->consume(delta_mem);
-        ExecEnv::GetInstance()->memtable_memory_limiter()->insert_mem_tracker()->consume(delta_mem);
+        ExecEnv::GetInstance()->memtable_memory_limiter()->write_mem_tracker()->consume(delta_mem);
         auto limiter = ExecEnv::GetInstance()->memtable_memory_limiter();
         THREAD_MEM_TRACKER_TRANSFER_TO(delta_mem, limiter->mem_tracker());
 #endif

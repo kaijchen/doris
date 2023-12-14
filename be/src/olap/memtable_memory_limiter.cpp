@@ -42,7 +42,7 @@ bvar::PassiveStatus<int64_t> g_memtable_write_memory(
         "mm_limiter_mem_write",
         [](void*) {
             auto limiter = ExecEnv::GetInstance()->memtable_memory_limiter();
-            auto tracker = limiter == nullptr ? nullptr : limiter->insert_mem_tracker();
+            auto tracker = limiter == nullptr ? nullptr : limiter->write_mem_tracker();
             return tracker == nullptr ? 0 : tracker->consumption();
         },
         nullptr);
@@ -92,7 +92,7 @@ Status MemTableMemoryLimiter::init(int64_t process_mem_limit) {
     _mem_tracker = std::make_unique<MemTrackerLimiter>(MemTrackerLimiter::Type::LOAD,
                                                        "MemTableMemoryLimiter");
     _active_mem_tracker = std::make_unique<MemTracker>("MemTableActiveMemory", _mem_tracker.get());
-    _insert_mem_tracker = std::make_unique<MemTracker>("MemTableWriteMemory", _mem_tracker.get());
+    _write_mem_tracker = std::make_unique<MemTracker>("MemTableWriteMemory", _mem_tracker.get());
     _flush_mem_tracker = std::make_unique<MemTracker>("MemTableFlushMemory", _mem_tracker.get());
     REGISTER_HOOK_METRIC(memtable_memory_limiter_mem_consumption,
                          [this]() { return _mem_tracker->consumption(); });
@@ -141,11 +141,11 @@ void MemTableMemoryLimiter::handle_memtable_flush() {
     while (_hard_limit_reached()) {
         LOG(INFO) << "reached memtable memory hard limit"
                   << " (active: " << PrettyPrinter::print_bytes(_active_mem_tracker->consumption())
-                  << ", write: " << PrettyPrinter::print_bytes(_insert_mem_tracker->consumption())
+                  << ", write: " << PrettyPrinter::print_bytes(_write_mem_tracker->consumption())
                   << ", flush: " << PrettyPrinter::print_bytes(_flush_mem_tracker->consumption()) << ")";
         if (_active_mem_tracker->consumption() >=
-            _insert_mem_tracker->consumption() * config::memtable_hard_limit_active_percent / 100) {
-            _flush_active_memtables(_insert_mem_tracker->consumption() / 20);
+            _write_mem_tracker->consumption() * config::memtable_hard_limit_active_percent / 100) {
+            _flush_active_memtables(_write_mem_tracker->consumption() / 20);
         }
         if (!_hard_limit_reached()) {
             break;
@@ -159,11 +159,11 @@ void MemTableMemoryLimiter::handle_memtable_flush() {
     if (_soft_limit_reached()) {
         LOG(INFO) << "reached memtable memory soft limit"
                   << " (active: " << PrettyPrinter::print_bytes(_active_mem_tracker->consumption())
-                  << ", write: " << PrettyPrinter::print_bytes(_insert_mem_tracker->consumption())
+                  << ", write: " << PrettyPrinter::print_bytes(_write_mem_tracker->consumption())
                   << ", flush: " << PrettyPrinter::print_bytes(_flush_mem_tracker->consumption()) << ")";
         if (_active_mem_tracker->consumption() >=
-            _insert_mem_tracker->consumption() * config::memtable_soft_limit_active_percent / 100) {
-            _flush_active_memtables(_insert_mem_tracker->consumption() / 20);
+            _write_mem_tracker->consumption() * config::memtable_soft_limit_active_percent / 100) {
+            _flush_active_memtables(_write_mem_tracker->consumption() / 20);
         }
     }
     timer.stop();
@@ -235,7 +235,7 @@ void MemTableMemoryLimiter::refresh_mem_tracker() {
                   << "), load mem: " << PrettyPrinter::print_bytes(_mem_tracker->consumption())
                   << ", memtable writers num: " << _writers.size()
                   << " (active: " << PrettyPrinter::print_bytes(_active_mem_tracker->consumption())
-                  << ", write: " << PrettyPrinter::print_bytes(_insert_mem_tracker->consumption())
+                  << ", write: " << PrettyPrinter::print_bytes(_write_mem_tracker->consumption())
                   << ", flush: " << PrettyPrinter::print_bytes(_flush_mem_tracker->consumption()) << ")";
     }
     if (!_hard_limit_reached()) {
