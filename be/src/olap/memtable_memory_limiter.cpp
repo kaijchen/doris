@@ -30,18 +30,43 @@ DEFINE_GAUGE_METRIC_PROTOTYPE_5ARG(memtable_memory_limiter_mem_consumption, Metr
                                    memtable_memory_limiter_mem_consumption,
                                    Labels({{"type", "load"}}));
 
+bvar::PassiveStatus<int64_t> g_memtable_active_memory(
+        "mm_limiter_mem_active",
+        [](void*) {
+            auto limiter = ExecEnv::GetInstance()->memtable_memory_limiter();
+            auto tracker = limiter == nullptr ? nullptr : limiter->active_mem_tracker();
+            return tracker == nullptr ? 0 : tracker->consumption();
+        },
+        nullptr);
+bvar::PassiveStatus<int64_t> g_memtable_write_memory(
+        "mm_limiter_mem_write",
+        [](void*) {
+            auto limiter = ExecEnv::GetInstance()->memtable_memory_limiter();
+            auto tracker = limiter == nullptr ? nullptr : limiter->insert_mem_tracker();
+            return tracker == nullptr ? 0 : tracker->consumption();
+        },
+        nullptr);
+bvar::PassiveStatus<int64_t> g_memtable_flush_memory(
+        "mm_limiter_mem_flush",
+        [](void*) {
+            auto limiter = ExecEnv::GetInstance()->memtable_memory_limiter();
+            auto tracker = limiter == nullptr ? nullptr : limiter->flush_mem_tracker();
+            return tracker == nullptr ? 0 : tracker->consumption();
+        },
+        nullptr);
+bvar::PassiveStatus<int64_t> g_memtable_load_memory(
+        "mm_limiter_mem_load",
+        [](void*) {
+            auto limiter = ExecEnv::GetInstance()->memtable_memory_limiter();
+            auto tracker = limiter == nullptr ? nullptr : limiter->mem_tracker();
+            return tracker == nullptr ? 0 : tracker->consumption();
+        },
+        nullptr);
+
 bvar::LatencyRecorder g_memtable_memory_limit_latency_ms("mm_limiter_limit_time_ms");
 bvar::Adder<int> g_memtable_memory_limit_waiting_threads("mm_limiter_waiting_threads");
-bvar::Status<int64_t> g_memtable_active_memory("mm_limiter_mem_active", 0);
-bvar::Status<int64_t> g_memtable_write_memory("mm_limiter_mem_write", 0);
-bvar::Status<int64_t> g_memtable_flush_memory("mm_limiter_mem_flush", 0);
-bvar::Status<int64_t> g_memtable_load_memory("mm_limiter_mem_load", 0);
 bvar::Status<int64_t> g_load_hard_mem_limit("mm_limiter_limit_hard", 0);
 bvar::Status<int64_t> g_load_soft_mem_limit("mm_limiter_limit_soft", 0);
-bvar::Status<int64_t> g_memtable_write_memory2("mm_limiter_mem_write2", 0);
-bvar::Status<int64_t> g_memtable_flush_memory2("mm_limiter_mem_flush2", 0);
-bvar::Status<int64_t> g_memtable_load_memory2("mm_limiter_mem_load2", 0);
-bvar::Status<int64_t> g_memtable_load_memory3("mm_limiter_mem_load3", 0);
 
 // Calculate the total memory limit of all load tasks on this BE
 static int64_t calc_process_max_load_memory(int64_t process_mem_limit) {
@@ -235,9 +260,6 @@ void MemTableMemoryLimiter::_refresh_mem_tracker() {
             _writers.pop_back();
         }
     }
-    g_memtable_write_memory.set_value(_insert_mem_tracker->consumption());
-    g_memtable_flush_memory.set_value(_flush_mem_tracker->consumption());
-    g_memtable_load_memory.set_value(_mem_tracker->consumption());
     VLOG_DEBUG << "refreshed mem_tracker, num writers: " << _writers.size();
 }
 
