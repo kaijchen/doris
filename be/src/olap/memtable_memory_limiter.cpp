@@ -91,7 +91,6 @@ Status MemTableMemoryLimiter::init(int64_t process_mem_limit) {
     g_load_soft_mem_limit.set_value(_load_soft_mem_limit);
     _mem_tracker = std::make_unique<MemTrackerLimiter>(MemTrackerLimiter::Type::LOAD,
                                                        "MemTableMemoryLimiter");
-    _load_mem_tracker = std::make_unique<MemTracker>("MemTableLoadMemory", _mem_tracker.get());
     _active_mem_tracker = std::make_unique<MemTracker>("MemTableActiveMemory", _mem_tracker.get());
     _insert_mem_tracker = std::make_unique<MemTracker>("MemTableWriteMemory", _mem_tracker.get());
     _flush_mem_tracker = std::make_unique<MemTracker>("MemTableFlushMemory", _mem_tracker.get());
