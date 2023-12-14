@@ -38,6 +38,10 @@ bvar::Status<int64_t> g_memtable_flush_memory("mm_limiter_mem_flush", 0);
 bvar::Status<int64_t> g_memtable_load_memory("mm_limiter_mem_load", 0);
 bvar::Status<int64_t> g_load_hard_mem_limit("mm_limiter_limit_hard", 0);
 bvar::Status<int64_t> g_load_soft_mem_limit("mm_limiter_limit_soft", 0);
+bvar::Status<int64_t> g_memtable_write_memory2("mm_limiter_mem_write2", 0);
+bvar::Status<int64_t> g_memtable_flush_memory2("mm_limiter_mem_flush2", 0);
+bvar::Status<int64_t> g_memtable_load_memory2("mm_limiter_mem_load2", 0);
+bvar::Status<int64_t> g_memtable_load_memory3("mm_limiter_mem_load3", 0);
 
 // Calculate the total memory limit of all load tasks on this BE
 static int64_t calc_process_max_load_memory(int64_t process_mem_limit) {
@@ -62,6 +66,9 @@ Status MemTableMemoryLimiter::init(int64_t process_mem_limit) {
     g_load_soft_mem_limit.set_value(_load_soft_mem_limit);
     _mem_tracker = std::make_unique<MemTrackerLimiter>(MemTrackerLimiter::Type::LOAD,
                                                        "MemTableMemoryLimiter");
+    _load_mem_tracker = std::make_unique<MemTracker>("MemTableLoadMemory", _mem_tracker.get());
+    _insert_mem_tracker = std::make_unique<MemTracker>("MemTableWriteMemory", _mem_tracker.get());
+    _flush_mem_tracker = std::make_unique<MemTracker>("MemTableFlushMemory", _mem_tracker.get());
     REGISTER_HOOK_METRIC(memtable_memory_limiter_mem_consumption,
                          [this]() { return _mem_tracker->consumption(); });
     return Status::OK();
@@ -234,8 +241,12 @@ void MemTableMemoryLimiter::_refresh_mem_tracker() {
     g_memtable_write_memory.set_value(_write_mem_usage);
     g_memtable_flush_memory.set_value(_flush_mem_usage);
     g_memtable_load_memory.set_value(_mem_usage);
+    g_memtable_write_memory2.set_value(_insert_mem_tracker->consumption());
+    g_memtable_flush_memory2.set_value(_flush_mem_tracker->consumption());
+    g_memtable_load_memory2.set_value(_load_mem_tracker->consumption());
+    g_memtable_load_memory3.set_value(_mem_tracker->consumption());
     VLOG_DEBUG << "refreshed mem_tracker, num writers: " << _writers.size();
-    THREAD_MEM_TRACKER_TRANSFER_TO(_mem_usage - _mem_tracker->consumption(), _mem_tracker.get());
+    //THREAD_MEM_TRACKER_TRANSFER_TO(_mem_usage - _mem_tracker->consumption(), _mem_tracker.get());
     if (!_hard_limit_reached()) {
         _hard_limit_end_cond.notify_all();
     }

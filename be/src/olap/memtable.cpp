@@ -153,6 +153,17 @@ MemTable::~MemTable() {
         }
     }
     std::for_each(_row_in_blocks.begin(), _row_in_blocks.end(), std::default_delete<RowInBlock>());
+#ifndef BE_TEST
+    // mem tracker is not perfet, avoid errors to accumulate here
+    auto limiter = ExecEnv::GetInstance()->memtable_memory_limiter();
+    THREAD_MEM_TRACKER_TRANSFER_TO(
+            -_insert_mem_tracker->consumption() - _flush_mem_tracker->consumption(),
+            limiter->mem_tracker());
+    limiter->load_mem_tracker()->release(_insert_mem_tracker->consumption() +
+                                         _flush_mem_tracker->consumption());
+    limiter->insert_mem_tracker()->release(_insert_mem_tracker->consumption());
+    limiter->flush_mem_tracker()->release(_flush_mem_tracker->consumption());
+#endif
     _insert_mem_tracker->release(_mem_usage);
     _flush_mem_tracker->set_consumption(0);
     DCHECK_EQ(_insert_mem_tracker->consumption(), 0)
@@ -207,6 +218,12 @@ void MemTable::insert(const vectorized::Block* input_block, const std::vector<ui
     }
     size_t input_size = target_block.bytes() * num_rows / target_block.rows();
     _mem_usage += input_size;
+#ifndef BE_TEST
+    ExecEnv::GetInstance()->memtable_memory_limiter()->load_mem_tracker()->consume(input_size);
+    ExecEnv::GetInstance()->memtable_memory_limiter()->insert_mem_tracker()->consume(input_size);
+    auto limiter = ExecEnv::GetInstance()->memtable_memory_limiter();
+    THREAD_MEM_TRACKER_TRANSFER_TO(input_size, limiter->mem_tracker());
+#endif
     _insert_mem_tracker->consume(input_size);
     for (int i = 0; i < num_rows; i++) {
         _row_in_blocks.emplace_back(new RowInBlock {cursor_in_mutableblock + i});
@@ -443,7 +460,14 @@ void MemTable::_aggregate() {
         // if is not final, we collect the agg results to input_block and then continue to insert
         size_t shrunked_after_agg = _output_mutable_block.allocated_bytes();
         // flush will not run here, so will not duplicate `_flush_mem_tracker`
-        _insert_mem_tracker->consume(shrunked_after_agg - _mem_usage);
+        auto delta_mem = shrunked_after_agg - _mem_usage;
+#ifndef BE_TEST
+        ExecEnv::GetInstance()->memtable_memory_limiter()->load_mem_tracker()->consume(delta_mem);
+        ExecEnv::GetInstance()->memtable_memory_limiter()->insert_mem_tracker()->consume(delta_mem);
+        auto limiter = ExecEnv::GetInstance()->memtable_memory_limiter();
+        THREAD_MEM_TRACKER_TRANSFER_TO(delta_mem, limiter->mem_tracker());
+#endif
+        _insert_mem_tracker->consume(delta_mem);
         _mem_usage = shrunked_after_agg;
         _input_mutable_block.swap(_output_mutable_block);
         //TODO(weixang):opt here.

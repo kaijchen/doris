@@ -117,6 +117,13 @@ Status FlushToken::_do_flush_memtable(MemTable* memtable, int32_t segment_id, in
     SCOPED_RAW_TIMER(&duration_ns);
     signal::set_signal_task_id(_rowset_writer->load_id());
     {
+#ifndef BE_TEST
+        SCOPED_ATTACH_TASK(ExecEnv::GetInstance()->memtable_memory_limiter()->mem_tracker_sptr());
+        SCOPED_CONSUME_MEM_TRACKER(
+                ExecEnv::GetInstance()->memtable_memory_limiter()->load_mem_tracker());
+        SCOPED_CONSUME_MEM_TRACKER(
+                ExecEnv::GetInstance()->memtable_memory_limiter()->flush_mem_tracker());
+#endif
         SCOPED_CONSUME_MEM_TRACKER(memtable->flush_mem_tracker());
         std::unique_ptr<vectorized::Block> block = memtable->to_block();
         SKIP_MEMORY_CHECK(RETURN_IF_ERROR(
