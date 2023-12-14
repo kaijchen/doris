@@ -262,6 +262,8 @@ private:
     std::vector<RowInBlock*> _row_in_blocks;
     // Memory usage without _arena.
     size_t _mem_usage;
+    // Memory usage 
+    size_t _active_mem_usage = 0;
 
     size_t _num_columns;
     int32_t _seq_col_idx_in_block = -1;

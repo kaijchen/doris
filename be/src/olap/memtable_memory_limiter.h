@@ -48,13 +48,13 @@ public:
 
     std::shared_ptr<MemTrackerLimiter> mem_tracker_sptr() { return _mem_tracker; }
 
-    MemTracker* load_mem_tracker() { return _load_mem_tracker.get(); }
+    MemTracker* active_mem_tracker() { return _active_mem_tracker.get(); }
 
     MemTracker* insert_mem_tracker() { return _insert_mem_tracker.get(); }
 
     MemTracker* flush_mem_tracker() { return _flush_mem_tracker.get(); }
 
-    int64_t mem_usage() const { return _mem_usage; }
+    int64_t mem_usage() const { return _mem_tracker->consumption(); }
 
 private:
     static int64_t _avail_mem_lack();
@@ -68,13 +68,10 @@ private:
 
     std::mutex _lock;
     std::condition_variable _hard_limit_end_cond;
-    int64_t _mem_usage = 0;
-    int64_t _flush_mem_usage = 0;
-    int64_t _write_mem_usage = 0;
     int64_t _active_mem_usage = 0;
 
     std::shared_ptr<MemTrackerLimiter> _mem_tracker;
-    std::unique_ptr<MemTracker> _load_mem_tracker;
+    std::unique_ptr<MemTracker> _active_mem_tracker;
     std::unique_ptr<MemTracker> _insert_mem_tracker;
     std::unique_ptr<MemTracker> _flush_mem_tracker;
     int64_t _load_hard_mem_limit = -1;

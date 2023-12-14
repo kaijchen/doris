@@ -120,8 +120,6 @@ Status FlushToken::_do_flush_memtable(MemTable* memtable, int32_t segment_id, in
 #ifndef BE_TEST
         SCOPED_ATTACH_TASK(ExecEnv::GetInstance()->memtable_memory_limiter()->mem_tracker_sptr());
         SCOPED_CONSUME_MEM_TRACKER(
-                ExecEnv::GetInstance()->memtable_memory_limiter()->load_mem_tracker());
-        SCOPED_CONSUME_MEM_TRACKER(
                 ExecEnv::GetInstance()->memtable_memory_limiter()->flush_mem_tracker());
 #endif
         SCOPED_CONSUME_MEM_TRACKER(memtable->flush_mem_tracker());
