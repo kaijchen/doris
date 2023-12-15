@@ -169,7 +169,9 @@ void MemTableMemoryLimiter::handle_memtable_flush() {
     timer.stop();
     int64_t time_ms = timer.elapsed_time() / 1000 / 1000;
     g_memtable_memory_limit_latency_ms << time_ms;
-    LOG(INFO) << "waited " << time_ms << " ms for memtable memory limit";
+    if (time_ms > 0) {
+        LOG(INFO) << "waited " << time_ms << " ms for memtable memory limit";
+    }
 }
 
 void MemTableMemoryLimiter::_flush_active_memtables(int64_t need_flush) {
