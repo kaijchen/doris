@@ -197,6 +197,8 @@ public:
 
     std::shared_ptr<MemTracker> flush_mem_tracker() { return _flush_mem_tracker; }
 
+    void reset_active_memory();
+
 private:
     // for vectorized
     void _aggregate_two_row_in_block(vectorized::MutableBlock& mutable_block, RowInBlock* new_row,

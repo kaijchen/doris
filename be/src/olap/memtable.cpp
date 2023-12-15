@@ -528,12 +528,15 @@ std::unique_ptr<vectorized::Block> MemTable::to_block() {
         !_tablet_schema->cluster_key_idxes().empty()) {
         _sort_by_cluster_keys();
     }
+    return vectorized::Block::create_unique(_output_mutable_block.to_block());
+}
+
+void MemTable::reset_active_memory() {
 #ifndef BE_TEST
     ExecEnv::GetInstance()->memtable_memory_limiter()->active_mem_tracker()->release(
             _active_mem_usage);
 #endif
     _active_mem_usage = 0;
-    return vectorized::Block::create_unique(_output_mutable_block.to_block());
 }
 
 } // namespace doris
