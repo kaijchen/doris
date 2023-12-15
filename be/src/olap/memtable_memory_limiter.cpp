@@ -225,9 +225,11 @@ int64_t MemTableMemoryLimiter::_flush_memtable(std::weak_ptr<MemTableWriter> wri
     return mem_usage;
 }
 
-void MemTableMemoryLimiter::refresh_mem_tracker() {
+void MemTableMemoryLimiter::refresh() {
     std::lock_guard<std::mutex> l(_lock);
-    if (_soft_limit_reached()) {
+    _ticks++;
+    // print log in around every 1s when tick = 1ms
+    if (((_ticks >> 10) & 1) && _soft_limit_reached()) {
         LOG(INFO) << "reached " << (_hard_limit_reached() ? "hard" : "soft") << " limit"
                   << ", process mem: " << PerfCounters::get_vm_rss_str()
                   << " (without allocator cache: "
@@ -237,6 +239,10 @@ void MemTableMemoryLimiter::refresh_mem_tracker() {
                   << " (active: " << PrettyPrinter::print_bytes(_active_mem_tracker->consumption())
                   << ", write: " << PrettyPrinter::print_bytes(_write_mem_tracker->consumption())
                   << ", flush: " << PrettyPrinter::print_bytes(_flush_mem_tracker->consumption()) << ")";
+    }
+    // garbage collect weak ptr vector in around every 1 min when tick = 1 ms
+    if ((_ticks >> 16) & 1) {
+        _refresh_mem_tracker();
     }
     if (!_hard_limit_reached()) {
         _hard_limit_end_cond.notify_all();

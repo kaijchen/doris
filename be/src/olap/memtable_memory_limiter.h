@@ -42,7 +42,7 @@ public:
 
     void register_writer(std::weak_ptr<MemTableWriter> writer);
 
-    void refresh_mem_tracker();
+    void refresh();
 
     MemTrackerLimiter* mem_tracker() { return _mem_tracker.get(); }
 
@@ -76,6 +76,7 @@ private:
     std::unique_ptr<MemTracker> _flush_mem_tracker;
     int64_t _load_hard_mem_limit = -1;
     int64_t _load_soft_mem_limit = -1;
+    uint64_t _ticks = 0;
 
     std::vector<std::weak_ptr<MemTableWriter>> _writers;
     std::vector<std::weak_ptr<MemTableWriter>> _active_writers;

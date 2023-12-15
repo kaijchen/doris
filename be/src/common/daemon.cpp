@@ -273,7 +273,7 @@ void Daemon::memtable_memory_limiter_tracker_refresh_thread() {
     // which helps to accurately control the memory of LoadChannelMgr.
     while (!_stop_background_threads_latch.wait_for(
             std::chrono::milliseconds(config::memtable_mem_tracker_refresh_interval_ms))) {
-        doris::ExecEnv::GetInstance()->memtable_memory_limiter()->refresh_mem_tracker();
+        doris::ExecEnv::GetInstance()->memtable_memory_limiter()->refresh();
     }
 }
 
