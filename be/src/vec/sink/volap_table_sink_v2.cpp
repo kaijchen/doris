@@ -57,6 +57,7 @@ Status VOlapTableSinkV2::close(RuntimeState* state, Status exec_status) {
         return _close_status;
     }
     _close_status = AsyncWriterSink::close(state, exec_status);
+    _closed = true;
     return _close_status;
 }
 
