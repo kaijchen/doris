@@ -233,6 +233,9 @@ void Daemon::memory_gc_thread() {
         sys_mem_available += tg_free_mem;
         proc_mem_no_allocator_cache -= tg_free_mem;
 
+        doris::MemTrackerLimiter::print_log_process_usage();
+        doris::MemTrackerLimiter::enable_print_log_process_usage();
+
         if (memory_full_gc_sleep_time_ms <= 0 &&
             (sys_mem_available < doris::MemInfo::sys_mem_available_low_water_mark() ||
              proc_mem_no_allocator_cache >= doris::MemInfo::mem_limit())) {
