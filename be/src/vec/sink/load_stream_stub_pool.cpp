@@ -45,9 +45,8 @@ LoadStreamStubPool::~LoadStreamStubPool() = default;
 std::shared_ptr<LoadStreams> LoadStreamStubPool::get_or_create(PUniqueId load_id, int64_t src_id,
                                                                int64_t dst_id, int num_streams,
                                                                int num_sink) {
-    auto key = std::make_pair(UniqueId(load_id), dst_id);
     std::lock_guard<std::mutex> lock(_mutex);
-    std::shared_ptr<LoadStreams> streams = _pool[key];
+    std::shared_ptr<LoadStreams> streams = _pool[load_id][dst_id];
     if (streams) {
         return streams;
     }
@@ -59,13 +58,25 @@ std::shared_ptr<LoadStreams> LoadStreamStubPool::get_or_create(PUniqueId load_id
         // copy construct, internal tablet schema map will be shared among all stubs
         streams->streams().emplace_back(new LoadStreamStub {*it->second});
     }
-    _pool[key] = streams;
+    _pool[load_id][dst_id] = streams;
     return streams;
+}
+
+void LoadStreamStubPool::cancel(PUniqueId load_id, Status reason) {
+    std::lock_guard<std::mutex> lock(_mutex);
+    for (const auto& [_, streams] : _pool[load_id]) {
+        for (const auto& stream : streams->streams()) {
+            stream->cancel(reason);
+        }
+    }
 }
 
 void LoadStreamStubPool::erase(UniqueId load_id, int64_t dst_id) {
     std::lock_guard<std::mutex> lock(_mutex);
-    _pool.erase(std::make_pair(load_id, dst_id));
+    _pool[load_id].erase(dst_id);
+    if (_pool[load_id].empty()) {
+        _pool.erase(load_id);
+    }
     _template_stubs.erase(load_id);
 }
 

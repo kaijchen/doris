@@ -97,6 +97,8 @@ public:
     std::shared_ptr<LoadStreams> get_or_create(PUniqueId load_id, int64_t src_id, int64_t dst_id,
                                                int num_streams, int num_sink);
 
+    void cancel(PUniqueId load_id, Status reason);
+
     void erase(UniqueId load_id, int64_t dst_id);
 
     size_t size() {
@@ -113,7 +115,7 @@ public:
 private:
     std::mutex _mutex;
     std::unordered_map<UniqueId, std::unique_ptr<LoadStreamStub>> _template_stubs;
-    std::unordered_map<std::pair<UniqueId, int64_t>, std::shared_ptr<LoadStreams>> _pool;
+    std::unordered_map<UniqueId, std::unordered_map<int64_t, std::shared_ptr<LoadStreams>>> _pool;
 };
 
 } // namespace doris

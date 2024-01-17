@@ -456,10 +456,8 @@ Status VTabletWriterV2::_cancel(Status status) {
         _delta_writer_for_tablet->cancel(status);
         _delta_writer_for_tablet.reset();
     }
+    ExecEnv::GetInstance()->load_stream_stub_pool()->cancel(_load_id, status);
     for (const auto& [_, streams] : _streams_for_node) {
-        for (const auto& stream : streams->streams()) {
-            stream->cancel(status);
-        }
         streams->release();
     }
     return Status::OK();
