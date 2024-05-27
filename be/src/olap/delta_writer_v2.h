@@ -59,6 +59,13 @@ namespace vectorized {
 class Block;
 } // namespace vectorized
 
+struct timers {
+    int64_t init_timer;
+    int64_t lock_timer;
+    int64_t write_timer;
+    int64_t wait_timer;
+};
+
 // Writer for a particular (load, index, tablet).
 // This class is NOT thread-safe, external synchronization is required.
 class DeltaWriterV2 {
@@ -72,7 +79,7 @@ public:
 
     Status init();
 
-    Status write(const vectorized::Block* block, const std::vector<uint32_t>& row_idxs);
+    Status write(const vectorized::Block* block, const std::vector<uint32_t>& row_idxs, timers& t);
 
     // flush the last memtable to flush queue, must call it before close_wait()
     Status close();

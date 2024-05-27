@@ -228,6 +228,10 @@ Status VTabletWriterV2::_init(RuntimeState* state, RuntimeProfile* profile) {
     _wait_mem_limit_timer = ADD_CHILD_TIMER(_profile, "WaitMemLimitTime", "SendDataTime");
     _row_distribution_timer = ADD_CHILD_TIMER(_profile, "RowDistributionTime", "SendDataTime");
     _write_memtable_timer = ADD_CHILD_TIMER(_profile, "WriteMemTableTime", "SendDataTime");
+    _init_timer = ADD_CHILD_TIMER(_profile, "InitTime", "WriteMemTableTime");
+    _lock_timer = ADD_CHILD_TIMER(_profile, "LockTime", "WriteMemTableTime");
+    _wait_timer = ADD_CHILD_TIMER(_profile, "WaitTime", "WriteMemTableTime");
+    _write_timer = ADD_CHILD_TIMER(_profile, "WriteTime", "WriteMemTableTime");
     _validate_data_timer = ADD_TIMER(_profile, "ValidateDataTime");
     _open_timer = ADD_TIMER(_profile, "OpenTime");
     _close_timer = ADD_TIMER(_profile, "CloseWaitTime");
@@ -463,9 +467,16 @@ Status VTabletWriterV2::_write_memtable(std::shared_ptr<vectorized::Block> block
         SCOPED_TIMER(_wait_mem_limit_timer);
         ExecEnv::GetInstance()->memtable_memory_limiter()->handle_memtable_flush();
     }
-    SCOPED_TIMER(_write_memtable_timer);
-    auto st = delta_writer->write(block.get(), rows.row_idxes);
-    return st;
+    {
+        SCOPED_TIMER(_write_memtable_timer);
+        timers t {0, 0, 0, 0};
+        RETURN_IF_ERROR(delta_writer->write(block.get(), rows.row_idxes, t));
+        COUNTER_UPDATE(_init_timer, t.init_timer);
+        COUNTER_UPDATE(_wait_timer, t.wait_timer);
+        COUNTER_UPDATE(_write_timer, t.write_timer);
+        COUNTER_UPDATE(_lock_timer, t.lock_timer);
+    }
+    return Status::OK();
 }
 
 Status VTabletWriterV2::_cancel(Status status) {

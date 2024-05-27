@@ -201,6 +201,10 @@ private:
     RuntimeProfile::Counter* _send_data_timer = nullptr;
     RuntimeProfile::Counter* _row_distribution_timer = nullptr;
     RuntimeProfile::Counter* _write_memtable_timer = nullptr;
+    RuntimeProfile::Counter* _init_timer = nullptr;
+    RuntimeProfile::Counter* _lock_timer = nullptr;
+    RuntimeProfile::Counter* _wait_timer = nullptr;
+    RuntimeProfile::Counter* _write_timer = nullptr;
     RuntimeProfile::Counter* _wait_mem_limit_timer = nullptr;
     RuntimeProfile::Counter* _validate_data_timer = nullptr;
     RuntimeProfile::Counter* _open_timer = nullptr;

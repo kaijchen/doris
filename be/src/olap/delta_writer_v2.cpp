@@ -141,17 +141,21 @@ Status DeltaWriterV2::init() {
     return Status::OK();
 }
 
-Status DeltaWriterV2::write(const vectorized::Block* block, const std::vector<uint32_t>& row_idxs) {
+Status DeltaWriterV2::write(const vectorized::Block* block, const std::vector<uint32_t>& row_idxs, timers& t) {
     if (UNLIKELY(row_idxs.empty())) {
         return Status::OK();
     }
+    t.lock_timer -= _lock_watch.elapsed_time();
     _lock_watch.start();
     std::lock_guard<std::mutex> l(_lock);
     _lock_watch.stop();
+    t.lock_timer += _lock_watch.elapsed_time();
     if (!_is_init && !_is_cancelled) {
+        SCOPED_RAW_TIMER(&t.init_timer);
         RETURN_IF_ERROR(init());
     }
     {
+        SCOPED_RAW_TIMER(&t.wait_timer);
         SCOPED_RAW_TIMER(&_wait_flush_limit_time);
         auto memtable_flush_running_count_limit = config::memtable_flush_running_count_limit;
         DBUG_EXECUTE_IF("DeltaWriterV2.write.back_pressure",
@@ -163,8 +167,12 @@ Status DeltaWriterV2::write(const vectorized::Block* block, const std::vector<ui
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     }
-    SCOPED_RAW_TIMER(&_write_memtable_time);
-    return _memtable_writer->write(block, row_idxs);
+    {
+        SCOPED_RAW_TIMER(&t.write_timer);
+        SCOPED_RAW_TIMER(&_write_memtable_time);
+        RETURN_IF_ERROR(_memtable_writer->write(block, row_idxs));
+    }
+    return Status::OK();
 }
 
 Status DeltaWriterV2::close() {
