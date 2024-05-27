@@ -170,7 +170,7 @@ Status DeltaWriterV2::write(const vectorized::Block* block, const std::vector<ui
     {
         SCOPED_RAW_TIMER(&t.write_timer);
         SCOPED_RAW_TIMER(&_write_memtable_time);
-        RETURN_IF_ERROR(_memtable_writer->write(block, row_idxs));
+        RETURN_IF_ERROR(_memtable_writer->write(block, row_idxs, t));
     }
     return Status::OK();
 }

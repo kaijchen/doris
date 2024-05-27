@@ -59,6 +59,17 @@ class Block;
 
 enum MemType { WRITE = 1, FLUSH = 2, ALL = 3 };
 
+struct timers {
+    int64_t init_timer = 0;
+    int64_t lock_timer = 0;
+    int64_t write_timer = 0;
+    int64_t wait_timer = 0;
+    int64_t mlock_timer = 0;
+    int64_t mwrite_timer = 0;
+    int64_t mshrink_timer = 0;
+    int64_t mflush_timer = 0;
+};
+
 // Writer for a particular (load, index, tablet).
 // This class is NOT thread-safe, external synchronization is required.
 class MemTableWriter {
@@ -71,7 +82,11 @@ public:
                 std::shared_ptr<PartialUpdateInfo> partial_update_info,
                 ThreadPool* wg_flush_pool_ptr, bool unique_key_mow = false);
 
-    Status write(const vectorized::Block* block, const std::vector<uint32_t>& row_idxs);
+    Status write(const vectorized::Block* block, const std::vector<uint32_t>& row_idxs) {
+        timers t;
+        return write(block, row_idxs, t);
+    }
+    Status write(const vectorized::Block* block, const std::vector<uint32_t>& row_idxs, timers& t);
 
     // flush the last memtable to flush queue, must call it before close_wait()
     Status close();

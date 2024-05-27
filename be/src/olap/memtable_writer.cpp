@@ -96,13 +96,16 @@ Status MemTableWriter::init(std::shared_ptr<RowsetWriter> rowset_writer,
 }
 
 Status MemTableWriter::write(const vectorized::Block* block,
-                             const std::vector<uint32_t>& row_idxs) {
+                             const std::vector<uint32_t>& row_idxs,
+                             timers& t) {
     if (UNLIKELY(row_idxs.empty())) {
         return Status::OK();
     }
+    t.mlock_timer -= _lock_watch.elapsed_time();
     _lock_watch.start();
     std::lock_guard<std::mutex> l(_lock);
     _lock_watch.stop();
+    t.mlock_timer += _lock_watch.elapsed_time();
     if (_is_cancelled) {
         return _cancel_status;
     }
@@ -117,12 +120,15 @@ Status MemTableWriter::write(const vectorized::Block* block,
     _total_received_rows += row_idxs.size();
     {
         SCOPED_RAW_TIMER(&_insert_time_ns);
+        SCOPED_RAW_TIMER(&t.mwrite_timer);
         RETURN_IF_ERROR(_mem_table->insert(block, row_idxs));
     }
     if (UNLIKELY(_mem_table->need_agg() && config::enable_shrink_memory)) {
+        SCOPED_RAW_TIMER(&t.mshrink_timer);
         _mem_table->shrink_memtable_by_agg();
     }
     if (UNLIKELY(_mem_table->need_flush())) {
+        SCOPED_RAW_TIMER(&t.mflush_timer);
         auto s = _flush_memtable_async();
         _reset_mem_table();
         if (UNLIKELY(!s.ok())) {

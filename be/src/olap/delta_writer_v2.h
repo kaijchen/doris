@@ -59,13 +59,6 @@ namespace vectorized {
 class Block;
 } // namespace vectorized
 
-struct timers {
-    int64_t init_timer;
-    int64_t lock_timer;
-    int64_t write_timer;
-    int64_t wait_timer;
-};
-
 // Writer for a particular (load, index, tablet).
 // This class is NOT thread-safe, external synchronization is required.
 class DeltaWriterV2 {
