@@ -115,8 +115,10 @@ Status MemTableWriter::write(const vectorized::Block* block,
     }
 
     _total_received_rows += row_idxs.size();
-    RETURN_IF_ERROR(_mem_table->insert(block, row_idxs));
-
+    {
+        SCOPED_RAW_TIMER(&_insert_time_ns);
+        RETURN_IF_ERROR(_mem_table->insert(block, row_idxs));
+    }
     if (UNLIKELY(_mem_table->need_agg() && config::enable_shrink_memory)) {
         _mem_table->shrink_memtable_by_agg();
     }
@@ -296,6 +298,7 @@ void MemTableWriter::_update_profile(RuntimeProfile* profile) {
     // To avoid accessing dangling pointers, we cannot make profile as a member of MemTableWriter.
     auto child =
             profile->create_child(fmt::format("MemTableWriter {}", _req.tablet_id), true, true);
+    auto insert_timer = ADD_TIMER(child, "InsertTime");
     auto lock_timer = ADD_TIMER(child, "LockTime");
     auto sort_timer = ADD_TIMER(child, "MemTableSortTime");
     auto agg_timer = ADD_TIMER(child, "MemTableAggTime");
@@ -311,6 +314,7 @@ void MemTableWriter::_update_profile(RuntimeProfile* profile) {
     auto raw_rows_num = ADD_COUNTER(child, "RawRowNum", TUnit::UNIT);
     auto merged_rows_num = ADD_COUNTER(child, "MergedRowNum", TUnit::UNIT);
 
+    COUNTER_UPDATE(insert_timer, _insert_time_ns);
     COUNTER_UPDATE(lock_timer, _lock_watch.elapsed_time());
     COUNTER_SET(delete_bitmap_timer, _rowset_writer->delete_bitmap_ns());
     COUNTER_SET(segment_writer_timer, _rowset_writer->segment_writer_ns());

@@ -139,6 +139,7 @@ private:
 
     // total rows num written by MemTableWriter
     std::atomic<int64_t> _total_received_rows = 0;
+    int64_t _insert_time_ns = 0;
     int64_t _wait_flush_time_ns = 0;
     int64_t _close_wait_time_ns = 0;
     int64_t _segment_num = 0;

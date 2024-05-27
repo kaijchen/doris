@@ -79,9 +79,11 @@ void DeltaWriterV2::_update_profile(RuntimeProfile* profile) {
     auto write_memtable_timer = ADD_TIMER(child, "WriteMemTableTime");
     auto wait_flush_limit_timer = ADD_TIMER(child, "WaitFlushLimitTime");
     auto close_wait_timer = ADD_TIMER(child, "CloseWaitTime");
+    auto lock_timer = ADD_TIMER(child, "WaitLockTime");
     COUNTER_SET(write_memtable_timer, _write_memtable_time);
     COUNTER_SET(wait_flush_limit_timer, _wait_flush_limit_time);
     COUNTER_SET(close_wait_timer, _close_wait_time);
+    COUNTER_UPDATE(lock_timer, _lock_watch.elapsed_time());
 }
 
 DeltaWriterV2::~DeltaWriterV2() {
