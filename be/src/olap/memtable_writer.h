@@ -59,17 +59,6 @@ class Block;
 
 enum MemType { WRITE = 1, FLUSH = 2, ALL = 3 };
 
-struct timers {
-    int64_t init_timer = 0;
-    int64_t lock_timer = 0;
-    int64_t write_timer = 0;
-    int64_t wait_timer = 0;
-    int64_t mlock_timer = 0;
-    int64_t mwrite_timer = 0;
-    int64_t mshrink_timer = 0;
-    int64_t mflush_timer = 0;
-};
-
 // Writer for a particular (load, index, tablet).
 // This class is NOT thread-safe, external synchronization is required.
 class MemTableWriter {

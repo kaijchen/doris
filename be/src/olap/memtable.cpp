@@ -179,10 +179,14 @@ int RowInBlockComparator::operator()(const RowInBlock* left, const RowInBlock* r
 }
 
 Status MemTable::insert(const vectorized::Block* input_block,
-                        const std::vector<uint32_t>& row_idxs) {
+                        const std::vector<uint32_t>& row_idxs, timers& t) {
     vectorized::Block target_block = *input_block;
-    target_block = input_block->copy_block(_column_offset);
+    {
+        SCOPED_RAW_TIMER(&t.mmcopy_timer);
+        target_block = input_block->copy_block(_column_offset);
+    }
     if (_is_first_insertion) {
+        SCOPED_RAW_TIMER(&t.mminit_timer);
         _is_first_insertion = false;
         auto cloneBlock = target_block.clone_without_columns();
         _input_mutable_block = vectorized::MutableBlock::build_mutable_block(&cloneBlock);
@@ -207,11 +211,15 @@ Status MemTable::insert(const vectorized::Block* input_block,
         }
     }
 
+    SCOPED_RAW_TIMER(&t.mminsert_timer);
     auto num_rows = row_idxs.size();
     size_t cursor_in_mutableblock = _input_mutable_block.rows();
     auto block_size0 = _input_mutable_block.allocated_bytes();
-    RETURN_IF_ERROR(_input_mutable_block.add_rows(&target_block, row_idxs.data(),
-                                                  row_idxs.data() + num_rows));
+    {
+        SCOPED_RAW_TIMER(&t.mmadd_timer);
+        RETURN_IF_ERROR(_input_mutable_block.add_rows(&target_block, row_idxs.data(),
+                                                    row_idxs.data() + num_rows));
+    }
     auto block_size1 = _input_mutable_block.allocated_bytes();
     g_memtable_input_block_allocated_size << block_size1 - block_size0;
     auto input_size = size_t(target_block.bytes() * num_rows / target_block.rows() *

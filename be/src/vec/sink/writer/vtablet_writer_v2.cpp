@@ -236,6 +236,10 @@ Status VTabletWriterV2::_init(RuntimeState* state, RuntimeProfile* profile) {
     _mwrite_timer = ADD_CHILD_TIMER(_profile, "mWriteTime", "WriteMemTableTime");
     _mshrink_timer = ADD_CHILD_TIMER(_profile, "mShrinkTime", "WriteMemTableTime");
     _mflush_timer = ADD_CHILD_TIMER(_profile, "mFlushTime", "WriteMemTableTime");
+    _mminit_timer = ADD_CHILD_TIMER(_profile, "mmInitTime", "WriteMemTableTime");
+    _mminsert_timer = ADD_CHILD_TIMER(_profile, "mmInsertTime", "WriteMemTableTime");
+    _mmadd_timer = ADD_CHILD_TIMER(_profile, "mmAddTime", "WriteMemTableTime");
+    _mmcopy_timer = ADD_CHILD_TIMER(_profile, "mmCopyTime", "WriteMemTableTime");
     _validate_data_timer = ADD_TIMER(_profile, "ValidateDataTime");
     _open_timer = ADD_TIMER(_profile, "OpenTime");
     _close_timer = ADD_TIMER(_profile, "CloseWaitTime");
@@ -483,6 +487,10 @@ Status VTabletWriterV2::_write_memtable(std::shared_ptr<vectorized::Block> block
         COUNTER_UPDATE(_mwrite_timer, t.mwrite_timer);
         COUNTER_UPDATE(_mshrink_timer, t.mshrink_timer);
         COUNTER_UPDATE(_mflush_timer, t.mflush_timer);
+        COUNTER_UPDATE(_mminit_timer, t.mminit_timer);
+        COUNTER_UPDATE(_mminsert_timer, t.mminsert_timer);
+        COUNTER_UPDATE(_mmadd_timer, t.mmadd_timer);
+        COUNTER_UPDATE(_mmcopy_timer, t.mmcopy_timer);
     }
     return Status::OK();
 }

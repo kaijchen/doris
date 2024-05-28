@@ -121,7 +121,7 @@ Status MemTableWriter::write(const vectorized::Block* block,
     {
         SCOPED_RAW_TIMER(&_insert_time_ns);
         SCOPED_RAW_TIMER(&t.mwrite_timer);
-        RETURN_IF_ERROR(_mem_table->insert(block, row_idxs));
+        RETURN_IF_ERROR(_mem_table->insert(block, row_idxs, t));
     }
     if (UNLIKELY(_mem_table->need_agg() && config::enable_shrink_memory)) {
         SCOPED_RAW_TIMER(&t.mshrink_timer);

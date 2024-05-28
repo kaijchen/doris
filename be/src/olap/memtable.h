@@ -47,6 +47,21 @@ class TabletSchema;
 class TupleDescriptor;
 enum KeysType : int;
 
+struct timers {
+    int64_t init_timer = 0;
+    int64_t lock_timer = 0;
+    int64_t write_timer = 0;
+    int64_t wait_timer = 0;
+    int64_t mlock_timer = 0;
+    int64_t mwrite_timer = 0;
+    int64_t mshrink_timer = 0;
+    int64_t mflush_timer = 0;
+    int64_t mmcopy_timer = 0;
+    int64_t mminit_timer = 0;
+    int64_t mminsert_timer = 0;
+    int64_t mmadd_timer = 0;
+};
+
 // row pos in _input_mutable_block
 struct RowInBlock {
     size_t _row_pos;
@@ -181,7 +196,11 @@ public:
                _flush_mem_tracker->consumption();
     }
     // insert tuple from (row_pos) to (row_pos+num_rows)
-    Status insert(const vectorized::Block* block, const std::vector<uint32_t>& row_idxs);
+    Status insert(const vectorized::Block* block, const std::vector<uint32_t>& row_idxs) {
+        timers t;
+        return insert(block, row_idxs, t);
+    }
+    Status insert(const vectorized::Block* block, const std::vector<uint32_t>& row_idxs, timers& t);
 
     void shrink_memtable_by_agg();
 
