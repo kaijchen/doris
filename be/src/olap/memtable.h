@@ -56,10 +56,12 @@ struct timers {
     int64_t mwrite_timer = 0;
     int64_t mshrink_timer = 0;
     int64_t mflush_timer = 0;
+    int64_t mmcopy_timer0 = 0;
     int64_t mmcopy_timer = 0;
     int64_t mminit_timer = 0;
     int64_t mminsert_timer = 0;
     int64_t mmadd_timer = 0;
+    int64_t mmemplace_timer = 0;
 };
 
 // row pos in _input_mutable_block

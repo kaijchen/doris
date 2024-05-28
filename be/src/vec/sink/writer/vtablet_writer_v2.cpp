@@ -228,18 +228,20 @@ Status VTabletWriterV2::_init(RuntimeState* state, RuntimeProfile* profile) {
     _wait_mem_limit_timer = ADD_CHILD_TIMER(_profile, "WaitMemLimitTime", "SendDataTime");
     _row_distribution_timer = ADD_CHILD_TIMER(_profile, "RowDistributionTime", "SendDataTime");
     _write_memtable_timer = ADD_CHILD_TIMER(_profile, "WriteMemTableTime", "SendDataTime");
-    _init_timer = ADD_CHILD_TIMER(_profile, "InitTime", "WriteMemTableTime");
-    _lock_timer = ADD_CHILD_TIMER(_profile, "LockTime", "WriteMemTableTime");
-    _wait_timer = ADD_CHILD_TIMER(_profile, "WaitTime", "WriteMemTableTime");
-    _write_timer = ADD_CHILD_TIMER(_profile, "WriteTime", "WriteMemTableTime");
-    _mlock_timer = ADD_CHILD_TIMER(_profile, "mLockTime", "WriteMemTableTime");
-    _mwrite_timer = ADD_CHILD_TIMER(_profile, "mWriteTime", "WriteMemTableTime");
-    _mshrink_timer = ADD_CHILD_TIMER(_profile, "mShrinkTime", "WriteMemTableTime");
-    _mflush_timer = ADD_CHILD_TIMER(_profile, "mFlushTime", "WriteMemTableTime");
-    _mminit_timer = ADD_CHILD_TIMER(_profile, "mmInitTime", "WriteMemTableTime");
-    _mminsert_timer = ADD_CHILD_TIMER(_profile, "mmInsertTime", "WriteMemTableTime");
-    _mmadd_timer = ADD_CHILD_TIMER(_profile, "mmAddTime", "WriteMemTableTime");
-    _mmcopy_timer = ADD_CHILD_TIMER(_profile, "mmCopyTime", "WriteMemTableTime");
+    _init_timer = ADD_CHILD_TIMER(_profile, "DeltaWriterInitTime", "WriteMemTableTime");
+    _lock_timer = ADD_CHILD_TIMER(_profile, "DeltaWriterLockTime", "WriteMemTableTime");
+    _wait_timer = ADD_CHILD_TIMER(_profile, "DeltaWriterWaitTime", "WriteMemTableTime");
+    _write_timer = ADD_CHILD_TIMER(_profile, "DeltaWriterWriteTime", "WriteMemTableTime");
+    _mlock_timer = ADD_CHILD_TIMER(_profile, "MemTableWriterLockTime", "DeltaWriterWriteTime");
+    _mwrite_timer = ADD_CHILD_TIMER(_profile, "MemTableWriterWriteTime", "DeltaWriterWriteTime");
+    _mshrink_timer = ADD_CHILD_TIMER(_profile, "MemTableWriterShrinkTime", "DeltaWriterWriteTime");
+    _mflush_timer = ADD_CHILD_TIMER(_profile, "MemTableWriterFlushTime", "DeltaWriterWriteTime");
+    _mminit_timer = ADD_CHILD_TIMER(_profile, "MemTableInitTime", "MemTableWriterWriteTime");
+    _mminsert_timer = ADD_CHILD_TIMER(_profile, "MemTableInsertTime", "MemTableWriterWriteTime");
+    _mmcopy_timer = ADD_CHILD_TIMER(_profile, "MemTableCopyTime", "MemTableWriterWriteTime");
+    _mmcopy_timer0 = ADD_CHILD_TIMER(_profile, "MemTableCopyTime0", "MemTableWriterWriteTime");
+    _mmadd_timer = ADD_CHILD_TIMER(_profile, "AddRowsTime", "MemTableInsertTime");
+    _mmemplace_timer = ADD_CHILD_TIMER(_profile, "EmplaceRowInBlockTime", "MemTableInsertTime");
     _validate_data_timer = ADD_TIMER(_profile, "ValidateDataTime");
     _open_timer = ADD_TIMER(_profile, "OpenTime");
     _close_timer = ADD_TIMER(_profile, "CloseWaitTime");
@@ -491,6 +493,8 @@ Status VTabletWriterV2::_write_memtable(std::shared_ptr<vectorized::Block> block
         COUNTER_UPDATE(_mminsert_timer, t.mminsert_timer);
         COUNTER_UPDATE(_mmadd_timer, t.mmadd_timer);
         COUNTER_UPDATE(_mmcopy_timer, t.mmcopy_timer);
+        COUNTER_UPDATE(_mmcopy_timer0, t.mmcopy_timer0);
+        COUNTER_UPDATE(_mmemplace_timer, t.mmemplace_timer);
     }
     return Status::OK();
 }
