@@ -187,6 +187,7 @@ Status MemTable::insert(const vectorized::Block* input_block,
     }
     {
         SCOPED_RAW_TIMER(&t.mmcopy_timer);
+        t.mmcopy_counter++;
         target_block = input_block->copy_block(_column_offset);
     }
     if (_is_first_insertion) {
