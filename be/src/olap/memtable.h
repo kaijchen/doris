@@ -253,6 +253,7 @@ private:
     void _init_columns_offset_by_slot_descs(const std::vector<SlotDescriptor*>* slot_descs,
                                             const TupleDescriptor* tuple_desc);
     std::vector<int> _column_offset;
+    bool _column_match = true;
 
     // Number of rows inserted to this memtable.
     // This is not the rows in this memtable, because rows may be merged
