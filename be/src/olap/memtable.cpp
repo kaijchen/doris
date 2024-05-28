@@ -180,7 +180,8 @@ int RowInBlockComparator::operator()(const RowInBlock* left, const RowInBlock* r
 
 Status MemTable::insert(const vectorized::Block* input_block,
                         const std::vector<uint32_t>& row_idxs, timers& t) {
-    vectorized::Block target_block;
+    const vectorized::Block& target_block = *input_block;
+    /*
     {
         SCOPED_RAW_TIMER(&t.mmcopy_timer0);
         target_block = *input_block;
@@ -188,7 +189,7 @@ Status MemTable::insert(const vectorized::Block* input_block,
     {
         SCOPED_RAW_TIMER(&t.mmcopy_timer);
         target_block = input_block->copy_block(_column_offset);
-    }
+    }*/
     if (_is_first_insertion) {
         SCOPED_RAW_TIMER(&t.mminit_timer);
         _is_first_insertion = false;
