@@ -101,11 +101,13 @@ Status MemTableWriter::write(const vectorized::Block* block,
     if (UNLIKELY(row_idxs.empty())) {
         return Status::OK();
     }
-    t.mlock_timer -= _lock_watch.elapsed_time();
+    MonotonicStopWatch sw;
     _lock_watch.start();
+    sw.start();
     std::lock_guard<std::mutex> l(_lock);
+    sw.stop();
     _lock_watch.stop();
-    t.mlock_timer += _lock_watch.elapsed_time();
+    t.mlock_timer += sw.elapsed_time();
     if (_is_cancelled) {
         return _cancel_status;
     }

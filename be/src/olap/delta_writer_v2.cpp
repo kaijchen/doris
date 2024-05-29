@@ -145,11 +145,13 @@ Status DeltaWriterV2::write(const vectorized::Block* block, const std::vector<ui
     if (UNLIKELY(row_idxs.empty())) {
         return Status::OK();
     }
-    t.lock_timer -= _lock_watch.elapsed_time();
+    MonotonicStopWatch sw;
     _lock_watch.start();
+    sw.start();
     std::lock_guard<std::mutex> l(_lock);
+    sw.stop();
     _lock_watch.stop();
-    t.lock_timer += _lock_watch.elapsed_time();
+    t.lock_timer += sw.elapsed_time();
     if (!_is_init && !_is_cancelled) {
         SCOPED_RAW_TIMER(&t.init_timer);
         RETURN_IF_ERROR(init());
