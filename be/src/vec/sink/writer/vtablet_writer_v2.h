@@ -215,6 +215,7 @@ private:
     RuntimeProfile::Counter* _mmcopy_timer = nullptr;
     RuntimeProfile::Counter* _mmcopy_timer0 = nullptr;
     RuntimeProfile::Counter* _mmcopy_counter = nullptr;
+    RuntimeProfile::Counter* _mmwrite_counter = nullptr;
     RuntimeProfile::Counter* _mmemplace_timer = nullptr;
     RuntimeProfile::Counter* _wait_mem_limit_timer = nullptr;
     RuntimeProfile::Counter* _validate_data_timer = nullptr;

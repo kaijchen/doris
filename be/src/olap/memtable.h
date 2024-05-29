@@ -63,6 +63,7 @@ struct timers {
     int64_t mminsert_timer = 0;
     int64_t mmadd_timer = 0;
     int64_t mmemplace_timer = 0;
+    int64_t mmwrite_counter = 0;
 };
 
 // row pos in _input_mutable_block

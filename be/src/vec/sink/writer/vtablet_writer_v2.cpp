@@ -241,6 +241,7 @@ Status VTabletWriterV2::_init(RuntimeState* state, RuntimeProfile* profile) {
     _mmcopy_timer = ADD_CHILD_TIMER(_profile, "MemTableCopyTime", "MemTableWriterWriteTime");
     _mmcopy_timer0 = ADD_CHILD_TIMER(_profile, "MemTableCopyTime0", "MemTableWriterWriteTime");
     _mmcopy_counter = ADD_CHILD_COUNTER(_profile, "MemTableCopyCount", TUnit::UNIT, "MemTableWriterWriteTime");
+    _mmwrite_counter = ADD_CHILD_COUNTER(_profile, "MemTableWriteCount", TUnit::UNIT, "MemTableWriterWriteTime");
     _mmadd_timer = ADD_CHILD_TIMER(_profile, "AddRowsTime", "MemTableInsertTime");
     _mmemplace_timer = ADD_CHILD_TIMER(_profile, "EmplaceRowInBlockTime", "MemTableInsertTime");
     _validate_data_timer = ADD_TIMER(_profile, "ValidateDataTime");
@@ -501,6 +502,7 @@ Status VTabletWriterV2::_write_memtable(std::shared_ptr<vectorized::Block> block
         COUNTER_UPDATE(_mmcopy_timer0, t.mmcopy_timer0);
         COUNTER_UPDATE(_mmcopy_counter, t.mmcopy_counter);
         COUNTER_UPDATE(_mmemplace_timer, t.mmemplace_timer);
+        COUNTER_UPDATE(_mmwrite_counter, t.mmwrite_counter);
     }
     return Status::OK();
 }

@@ -101,6 +101,7 @@ Status MemTableWriter::write(const vectorized::Block* block,
     if (UNLIKELY(row_idxs.empty())) {
         return Status::OK();
     }
+    t.mmwrite_counter++;
     MonotonicStopWatch sw;
     _lock_watch.start();
     sw.start();
