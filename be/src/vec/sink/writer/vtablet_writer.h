@@ -659,6 +659,7 @@ private:
     RuntimeProfile::Counter* _max_wait_exec_timer = nullptr;
     RuntimeProfile::Counter* _add_batch_number = nullptr;
     RuntimeProfile::Counter* _num_node_channels = nullptr;
+    RuntimeProfile::Counter* _add_block_counter = nullptr;
 
     // load mem limit is for remote load channel
     int64_t _load_mem_limit = -1;

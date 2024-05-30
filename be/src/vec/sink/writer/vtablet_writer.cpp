@@ -1210,6 +1210,7 @@ Status VTabletWriter::_init(RuntimeState* state, RuntimeProfile* profile) {
     _filter_timer = ADD_CHILD_TIMER(profile, "FilterTime", "SendDataTime");
     _where_clause_timer = ADD_CHILD_TIMER(profile, "WhereClauseTime", "SendDataTime");
     _append_node_channel_timer = ADD_CHILD_TIMER(profile, "AppendNodeChannelTime", "SendDataTime");
+    _add_block_counter = ADD_CHILD_COUNTER(profile, "AddBlockCount", TUnit::UNIT, "SendDataTime");
     _add_partition_request_timer =
             ADD_CHILD_TIMER(profile, "AddPartitionRequestTime", "SendDataTime");
     _validate_data_timer = ADD_TIMER(profile, "ValidateDataTime");
@@ -1714,6 +1715,7 @@ Status VTabletWriter::write(doris::vectorized::Block& input_block) {
         for (const auto& entry : channel_to_payload[i]) {
             // if this node channel is already failed, this add_row will be skipped
             // entry.second is a [row -> tablet] mapping
+            COUNTER_UPDATE(_add_block_counter, 1);
             auto st = entry.first->add_block(block.get(), &entry.second);
             if (!st.ok()) {
                 _channels[i]->mark_as_failed(entry.first, st.to_string());
