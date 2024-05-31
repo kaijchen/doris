@@ -24,6 +24,7 @@
 #include "cloud/config.h"
 #include "common/logging.h"
 #include "olap/storage_engine.h"
+#include "olap/memtable.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/memory/mem_tracker.h"
@@ -85,6 +86,8 @@ void LoadChannel::_init_profile() {
                                    true, true);
     _add_batch_number_counter = ADD_COUNTER(_self_profile, "NumberBatchAdded", TUnit::UNIT);
     _write_memtable_counter = ADD_COUNTER(_self_profile, "WriteMemtableNum", TUnit::UNIT);
+    _write_memtable_timer = ADD_TIMER(_self_profile, "WriteMemtableTime");
+    _add_rows_timer = ADD_TIMER(_self_profile, "MemtableAddRowsTime");
     _peak_memory_usage_counter = ADD_COUNTER(_self_profile, "PeakMemoryUsage", TUnit::BYTES);
     _add_batch_timer = ADD_TIMER(_self_profile, "AddBatchTime");
     _handle_eos_timer = ADD_CHILD_TIMER(_self_profile, "HandleEosTime", "AddBatchTime");
@@ -172,17 +175,40 @@ Status LoadChannel::add_batch(const PTabletWriterAddBlockRequest& request,
 
     // 2. add block to tablets channel
     if (request.has_block()) {
-        int64_t write_cnt = 0;
-        RETURN_IF_ERROR(channel->add_batch(request, response, write_cnt));
+        timers t {};
+        RETURN_IF_ERROR(channel->add_batch(request, response, t));
         _add_batch_number_counter->update(1);
-        _write_memtable_counter->update(write_cnt);
+        _write_memtable_timer->update(t.mminsert_timer);
+        _add_rows_timer->update(t.mmadd_timer);
+        _write_memtable_counter->update(t.mmwrite_counter);
+        /*
+        int64_t init_timer = 0;
+        int64_t lock_timer = 0;
+        int64_t write_timer = 0;
+        int64_t wait_timer = 0;
+        int64_t mlock_timer = 0;
+        int64_t mwrite_timer = 0;
+        int64_t mshrink_timer = 0;
+        int64_t mflush_timer = 0;
+        int64_t mmcopy_timer0 = 0;
+        int64_t mmcopy_timer = 0;
+        int64_t mmcopy_counter = 0;
+        int64_t mminit_timer = 0;
+        int64_t = 0;
+        int64_t = 0;
+        int64_t mmemplace_timer = 0;
+        int64_t = 0;
+        */
     }
 
     // 3. handle eos
     // if channel is incremental, maybe hang on close until all close request arrived.
     if (request.has_eos() && request.eos()) {
         st = _handle_eos(channel.get(), request, response);
-        LOG(INFO) << "load_id=" << _load_id << ", write memtable cnt = " << _write_memtable_counter->value();
+        LOG(INFO) << "load_id=" << _load_id
+                  << ", write memtable cnt=" << _write_memtable_counter->value()
+                  << "write memtable time=" << _write_memtable_timer->value() / 1000 / 1000
+                  << "ms, add rows time=" << _add_rows_timer->value() / 1000 / 1000 << "ms";
         _report_profile(response);
         if (!st.ok()) {
             return st;

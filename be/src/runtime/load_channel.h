@@ -96,6 +96,8 @@ private:
     RuntimeProfile::Counter* _handle_mem_limit_timer = nullptr;
     RuntimeProfile::Counter* _handle_eos_timer = nullptr;
     RuntimeProfile::Counter* _write_memtable_counter = nullptr;
+    RuntimeProfile::Counter* _write_memtable_timer = nullptr;
+    RuntimeProfile::Counter* _add_rows_timer = nullptr;
 
     // lock protect the tablets channel map
     std::mutex _lock;

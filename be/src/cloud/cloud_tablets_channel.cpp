@@ -38,7 +38,7 @@ std::unique_ptr<BaseDeltaWriter> CloudTabletsChannel::create_delta_writer(
 }
 
 Status CloudTabletsChannel::add_batch(const PTabletWriterAddBlockRequest& request,
-                                      PTabletWriterAddBlockResult* response, int64_t& write_cnt) {
+                                      PTabletWriterAddBlockResult* response, timers& t) {
     // FIXME(plat1ko): Too many duplicate code with `TabletsChannel`
     SCOPED_TIMER(_add_batch_timer);
     int64_t cur_seq = 0;
@@ -70,7 +70,7 @@ Status CloudTabletsChannel::add_batch(const PTabletWriterAddBlockRequest& reques
         RETURN_IF_ERROR(_init_writers_by_partition_ids(partition_ids));
     }
 
-    return _write_block_data(request, cur_seq, tablet_to_rowidxs, response, write_cnt);
+    return _write_block_data(request, cur_seq, tablet_to_rowidxs, response, t);
 }
 
 Status CloudTabletsChannel::_init_writers_by_partition_ids(

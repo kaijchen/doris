@@ -123,7 +123,11 @@ public:
 
     ~DeltaWriter() override;
 
-    Status write(const vectorized::Block* block, const std::vector<uint32_t>& row_idxs) override;
+    Status write(const vectorized::Block* block, const std::vector<uint32_t>& row_idxs) override {
+        timers t;
+        return write(block, row_idxs, t);
+    }
+    Status write(const vectorized::Block* block, const std::vector<uint32_t>& row_idxs, timers& t);
 
     Status close() override;
 

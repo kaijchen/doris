@@ -547,7 +547,7 @@ std::ostream& operator<<(std::ostream& os, const TabletsChannelKey& key) {
 Status BaseTabletsChannel::_write_block_data(
         const PTabletWriterAddBlockRequest& request, int64_t cur_seq,
         std::unordered_map<int64_t, std::vector<uint32_t>>& tablet_to_rowidxs,
-        PTabletWriterAddBlockResult* response, int64_t& write_cnt) {
+        PTabletWriterAddBlockResult* response, timers& t) {
     vectorized::Block send_data;
     RETURN_IF_ERROR(send_data.deserialize(request.block()));
     CHECK(send_data.rows() == request.tablet_ids_size())
@@ -586,8 +586,8 @@ Status BaseTabletsChannel::_write_block_data(
     SCOPED_TIMER(_write_block_timer);
     for (const auto& tablet_to_rowidxs_it : tablet_to_rowidxs) {
         RETURN_IF_ERROR(write_tablet_data(tablet_to_rowidxs_it.first, [&](BaseDeltaWriter* writer) {
-            write_cnt++;
-            return writer->write(&send_data, tablet_to_rowidxs_it.second);
+            return reinterpret_cast<DeltaWriter*>(writer)->write(&send_data,
+                                                                 tablet_to_rowidxs_it.second, t);
         }));
     }
 
@@ -599,7 +599,7 @@ Status BaseTabletsChannel::_write_block_data(
 }
 
 Status TabletsChannel::add_batch(const PTabletWriterAddBlockRequest& request,
-                                 PTabletWriterAddBlockResult* response, int64_t& write_cnt) {
+                                 PTabletWriterAddBlockResult* response, timers& t) {
     SCOPED_TIMER(_add_batch_timer);
     int64_t cur_seq = 0;
     _add_batch_number_counter->update(1);
@@ -619,7 +619,7 @@ Status TabletsChannel::add_batch(const PTabletWriterAddBlockRequest& request,
             tablet_to_rowidxs;
     _build_tablet_to_rowidxs(request, &tablet_to_rowidxs);
 
-    return _write_block_data(request, cur_seq, tablet_to_rowidxs, response, write_cnt);
+    return _write_block_data(request, cur_seq, tablet_to_rowidxs, response, t);
 }
 
 void BaseTabletsChannel::_add_broken_tablet(int64_t tablet_id) {

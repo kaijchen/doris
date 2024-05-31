@@ -30,6 +30,7 @@
 #include <vector>
 
 #include "common/status.h"
+#include "olap/memtable.h"
 #include "util/bitmap.h"
 #include "util/runtime_profile.h"
 #include "util/spinlock.h"
@@ -96,7 +97,7 @@ public:
 
     // no-op when this channel has been closed or cancelled
     virtual Status add_batch(const PTabletWriterAddBlockRequest& request,
-                             PTabletWriterAddBlockResult* response, int64_t& write_cnt) = 0;
+                             PTabletWriterAddBlockResult* response, timers& t) = 0;
 
     // Mark sender with 'sender_id' as closed.
     // If all senders are closed, close this channel, set '*finished' to true, update 'tablet_vec'
@@ -122,7 +123,7 @@ public:
 protected:
     Status _write_block_data(const PTabletWriterAddBlockRequest& request, int64_t cur_seq,
                              std::unordered_map<int64_t, std::vector<uint32_t>>& tablet_to_rowidxs,
-                             PTabletWriterAddBlockResult* response, int64_t& write_cnt);
+                             PTabletWriterAddBlockResult* response, timers& t);
 
     Status _get_current_seq(int64_t& cur_seq, const PTabletWriterAddBlockRequest& request);
 
@@ -219,7 +220,7 @@ public:
     std::unique_ptr<BaseDeltaWriter> create_delta_writer(const WriteRequest& request) override;
 
     Status add_batch(const PTabletWriterAddBlockRequest& request,
-                     PTabletWriterAddBlockResult* response, int64_t& write_cnt) override;
+                     PTabletWriterAddBlockResult* response, timers& t) override;
 
     Status close(LoadChannel* parent, const PTabletWriterAddBlockRequest& req,
                  PTabletWriterAddBlockResult* res, bool* finished) override;
