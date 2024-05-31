@@ -84,6 +84,7 @@ void LoadChannel::_init_profile() {
                                                _load_id.to_string(), _sender_ip, _backend_id),
                                    true, true);
     _add_batch_number_counter = ADD_COUNTER(_self_profile, "NumberBatchAdded", TUnit::UNIT);
+    _write_memtable_counter = ADD_COUNTER(_self_profile, "WriteMemtableNum", TUnit::UNIT);
     _peak_memory_usage_counter = ADD_COUNTER(_self_profile, "PeakMemoryUsage", TUnit::BYTES);
     _add_batch_timer = ADD_TIMER(_self_profile, "AddBatchTime");
     _handle_eos_timer = ADD_CHILD_TIMER(_self_profile, "HandleEosTime", "AddBatchTime");
@@ -171,14 +172,17 @@ Status LoadChannel::add_batch(const PTabletWriterAddBlockRequest& request,
 
     // 2. add block to tablets channel
     if (request.has_block()) {
-        RETURN_IF_ERROR(channel->add_batch(request, response));
+        int64_t write_cnt = 0;
+        RETURN_IF_ERROR(channel->add_batch(request, response, write_cnt));
         _add_batch_number_counter->update(1);
+        _write_memtable_counter->update(write_cnt);
     }
 
     // 3. handle eos
     // if channel is incremental, maybe hang on close until all close request arrived.
     if (request.has_eos() && request.eos()) {
         st = _handle_eos(channel.get(), request, response);
+        LOG(INFO) << "load_id=" << _load_id << ", write memtable cnt = " << _write_memtable_counter->value();
         _report_profile(response);
         if (!st.ok()) {
             return st;
