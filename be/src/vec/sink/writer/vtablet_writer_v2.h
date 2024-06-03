@@ -224,6 +224,17 @@ private:
     RuntimeProfile::Counter* _close_writer_timer = nullptr;
     RuntimeProfile::Counter* _close_load_timer = nullptr;
     RuntimeProfile::Counter* _add_partition_request_timer = nullptr;
+    RuntimeProfile::Counter* _dclose_timer = nullptr;
+    RuntimeProfile::Counter* _dclose_init_timer = nullptr;
+    RuntimeProfile::Counter* _dclose_wait_timer = nullptr;
+    RuntimeProfile::Counter* _dclose_profile_timer = nullptr;
+    RuntimeProfile::Counter* _mclose_timer = nullptr;
+    RuntimeProfile::Counter* _mclose_lock_timer = nullptr;
+    RuntimeProfile::Counter* _mclose_flush_timer = nullptr;
+    RuntimeProfile::Counter* _mclose_wait_timer = nullptr;
+    RuntimeProfile::Counter* _mclose_wait_lock_timer = nullptr;
+    RuntimeProfile::Counter* _mclose_wait_flush_timer = nullptr;
+    RuntimeProfile::Counter* _mclose_profile_timer = nullptr;
 
     std::mutex _close_mutex;
     bool _is_closed = false;

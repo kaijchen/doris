@@ -78,12 +78,21 @@ public:
     Status write(const vectorized::Block* block, const std::vector<uint32_t>& row_idxs, timers& t);
 
     // flush the last memtable to flush queue, must call it before close_wait()
-    Status close();
+    Status close() {
+        closetimers t;
+        return close(t);
+    }
+    Status close(closetimers& t);
     // wait for all memtables to be flushed, update profiles if provided.
     // mem_consumption() should be 0 after this function returns.
     Status close_wait(RuntimeProfile* profile = nullptr) {
-        RETURN_IF_ERROR(_do_close_wait());
+        closetimers t;
+        return close_wait(t, profile);
+    }
+    Status close_wait(closetimers& t, RuntimeProfile* profile = nullptr) {
+        RETURN_IF_ERROR(_do_close_wait(t));
         if (profile != nullptr) {
+            SCOPED_RAW_TIMER(&t.mclose_profile_timer);
             _update_profile(profile);
         }
         return Status::OK();
@@ -118,7 +127,7 @@ private:
 
     void _reset_mem_table();
 
-    Status _do_close_wait();
+    Status _do_close_wait(closetimers& t);
     void _update_profile(RuntimeProfile* profile);
 
     std::atomic<bool> _is_init = false;

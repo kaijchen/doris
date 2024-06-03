@@ -41,7 +41,7 @@ std::shared_ptr<DeltaWriterV2> DeltaWriterV2Map::get_or_create(
     return writer;
 }
 
-Status DeltaWriterV2Map::close(RuntimeProfile* profile) {
+Status DeltaWriterV2Map::close(closetimers& t, RuntimeProfile* profile) {
     int num_use = --_use_cnt;
     if (num_use > 0) {
         LOG(INFO) << "keeping DeltaWriterV2Map, load_id=" << _load_id << " , use_cnt=" << num_use;
@@ -53,11 +53,11 @@ Status DeltaWriterV2Map::close(RuntimeProfile* profile) {
     LOG(INFO) << "closing DeltaWriterV2Map, load_id=" << _load_id;
     std::lock_guard lock(_mutex);
     for (auto& [_, writer] : _map) {
-        RETURN_IF_ERROR(writer->close());
+        RETURN_IF_ERROR(writer->close(t));
     }
     LOG(INFO) << "close-waiting DeltaWriterV2Map, load_id=" << _load_id;
     for (auto& [_, writer] : _map) {
-        RETURN_IF_ERROR(writer->close_wait(profile));
+        RETURN_IF_ERROR(writer->close_wait(t, profile));
     }
     return Status::OK();
 }

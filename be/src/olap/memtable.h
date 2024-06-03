@@ -66,6 +66,20 @@ struct timers {
     int64_t mmwrite_counter = 0;
 };
 
+struct closetimers {
+    int64_t dclose_timer = 0;
+    int64_t dclose_init_timer = 0;
+    int64_t dclose_wait_timer = 0;
+    int64_t dclose_profile_timer = 0;
+    int64_t mclose_timer = 0;
+    int64_t mclose_lock_timer = 0;
+    int64_t mclose_flush_timer = 0;
+    int64_t mclose_wait_timer = 0;
+    int64_t mclose_wait_lock_timer = 0;
+    int64_t mclose_wait_flush_timer = 0;
+    int64_t mclose_profile_timer = 0;
+};
+
 // row pos in _input_mutable_block
 struct RowInBlock {
     size_t _row_pos;

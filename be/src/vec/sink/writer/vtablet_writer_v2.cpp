@@ -249,6 +249,17 @@ Status VTabletWriterV2::_init(RuntimeState* state, RuntimeProfile* profile) {
     _close_timer = ADD_TIMER(_profile, "CloseWaitTime");
     _close_writer_timer = ADD_CHILD_TIMER(_profile, "CloseWriterTime", "CloseWaitTime");
     _close_load_timer = ADD_CHILD_TIMER(_profile, "CloseLoadTime", "CloseWaitTime");
+    _dclose_timer = ADD_CHILD_TIMER(_profile, "CloseDeltaWriterTime", "CloseWriterTime");
+    _dclose_init_timer = ADD_CHILD_TIMER(_profile, "DInitTime", "CloseDeltaWriterTime");
+    _dclose_wait_timer = ADD_CHILD_TIMER(_profile, "CloseWaitDeltaWriterTime", "CloseWriterTime");
+    _dclose_profile_timer = ADD_CHILD_TIMER(_profile, "DProfileTime", "CloseWaitDeltaWriterTime");
+    _mclose_timer = ADD_CHILD_TIMER(_profile, "CloseMemtableWriterTime", "CloseDeltaWriterTime");
+    _mclose_lock_timer = ADD_CHILD_TIMER(_profile, "MLockTime", "CloseMemtableWriterTime");
+    _mclose_flush_timer = ADD_CHILD_TIMER(_profile, "MFlushTime", "CloseMemtableWriterTime");
+    _mclose_wait_timer = ADD_CHILD_TIMER(_profile, "CloseWaitMemtableWriterTime", "CloseWaitDeltaWriterTime");
+    _mclose_wait_lock_timer = ADD_CHILD_TIMER(_profile, "MWLockTime", "CloseWaitMemtableWriterTime");
+    _mclose_wait_flush_timer = ADD_CHILD_TIMER(_profile, "MWFlushTime", "CloseWaitMemtableWriterTime");
+    _mclose_profile_timer = ADD_CHILD_TIMER(_profile, "MWProfileTime", "CloseWaitMemtableWriterTime");
 
     if (config::share_delta_writers) {
         _delta_writer_for_tablet = ExecEnv::GetInstance()->delta_writer_v2_pool()->get_or_create(
@@ -581,7 +592,20 @@ Status VTabletWriterV2::close(Status exec_status) {
         {
             SCOPED_TIMER(_close_writer_timer);
             // close all delta writers if this is the last user
-            auto st = _delta_writer_for_tablet->close();
+            closetimers t {};
+            auto st = _delta_writer_for_tablet->close(t);
+            COUNTER_UPDATE(_dclose_timer, t.dclose_timer);
+            COUNTER_UPDATE(_dclose_init_timer, t.dclose_init_timer);
+            COUNTER_UPDATE(_dclose_wait_timer, t.dclose_wait_timer);
+            COUNTER_UPDATE(_dclose_profile_timer, t.dclose_profile_timer);
+            COUNTER_UPDATE(_mclose_timer, t.mclose_timer);
+            COUNTER_UPDATE(_mclose_lock_timer, t.mclose_lock_timer);
+            COUNTER_UPDATE(_mclose_flush_timer, t.mclose_flush_timer);
+            COUNTER_UPDATE(_mclose_wait_timer, t.mclose_wait_timer);
+            COUNTER_UPDATE(_mclose_wait_lock_timer, t.mclose_wait_lock_timer);
+            COUNTER_UPDATE(_mclose_wait_flush_timer, t.mclose_wait_flush_timer);
+            COUNTER_UPDATE(_mclose_profile_timer, t.mclose_profile_timer);
+
             _delta_writer_for_tablet.reset();
             if (!st.ok()) {
                 RETURN_IF_ERROR(_cancel(st));

@@ -49,6 +49,7 @@
 
 #include "common/config.h"
 #include "util/uid_util.h"
+#include "olap/memtable.h"
 
 namespace doris {
 
@@ -70,7 +71,7 @@ public:
             int64_t tablet_id, std::function<std::unique_ptr<DeltaWriterV2>()> creator);
 
     // close all delta writers in this DeltaWriterV2Map if there is no other users
-    Status close(RuntimeProfile* profile = nullptr);
+    Status close(closetimers& t, RuntimeProfile* profile = nullptr);
 
     // cancel all delta writers in this DeltaWriterV2Map
     void cancel(Status status);

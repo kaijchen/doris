@@ -177,7 +177,8 @@ Status DeltaWriterV2::write(const vectorized::Block* block, const std::vector<ui
     return Status::OK();
 }
 
-Status DeltaWriterV2::close() {
+Status DeltaWriterV2::close(closetimers& t) {
+    SCOPED_RAW_TIMER(&t.dclose_timer);
     _lock_watch.start();
     std::lock_guard<std::mutex> l(_lock);
     _lock_watch.stop();
@@ -187,21 +188,24 @@ Status DeltaWriterV2::close() {
         // in same partition has data loaded.
         // so we have to also init this DeltaWriterV2, so that it can create an empty rowset
         // for this tablet when being closed.
+        SCOPED_RAW_TIMER(&t.dclose_init_timer);
         RETURN_IF_ERROR(init());
     }
-    return _memtable_writer->close();
+    return _memtable_writer->close(t);
 }
 
-Status DeltaWriterV2::close_wait(RuntimeProfile* profile) {
+Status DeltaWriterV2::close_wait(closetimers& t, RuntimeProfile* profile) {
+    SCOPED_RAW_TIMER(&t.dclose_wait_timer);
     SCOPED_RAW_TIMER(&_close_wait_time);
     std::lock_guard<std::mutex> l(_lock);
     DCHECK(_is_init)
             << "delta writer is supposed be to initialized before close_wait() being called";
 
     if (profile != nullptr) {
+        SCOPED_RAW_TIMER(&t.dclose_profile_timer);
         _update_profile(profile);
     }
-    RETURN_IF_ERROR(_memtable_writer->close_wait(profile));
+    RETURN_IF_ERROR(_memtable_writer->close_wait(t, profile));
 
     _delta_written_success = true;
     return Status::OK();

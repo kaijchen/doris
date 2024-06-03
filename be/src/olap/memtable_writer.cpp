@@ -232,10 +232,15 @@ void MemTableWriter::_reset_mem_table() {
     _segment_num++;
 }
 
-Status MemTableWriter::close() {
+Status MemTableWriter::close(closetimers& t) {
+    SCOPED_RAW_TIMER(&t.mclose_timer);
+    MonotonicStopWatch sw;
     _lock_watch.start();
+    sw.start();
     std::lock_guard<std::mutex> l(_lock);
+    sw.stop();
     _lock_watch.stop();
+    t.mclose_lock_timer += sw.elapsed_time();
     if (_is_cancelled) {
         return _cancel_status;
     }
@@ -247,8 +252,11 @@ Status MemTableWriter::close() {
                      << " load_id=" << _req.load_id;
         return Status::OK();
     }
-
-    auto s = _flush_memtable_async();
+    Status s;
+    {
+        SCOPED_RAW_TIMER(&t.mclose_flush_timer);
+        s = _flush_memtable_async();
+    }
     {
         std::lock_guard<SpinLock> l(_mem_table_ptr_lock);
         _mem_table.reset();
@@ -261,9 +269,14 @@ Status MemTableWriter::close() {
     }
 }
 
-Status MemTableWriter::_do_close_wait() {
+Status MemTableWriter::_do_close_wait(closetimers& t) {
     SCOPED_RAW_TIMER(&_close_wait_time_ns);
+    SCOPED_RAW_TIMER(&t.mclose_wait_timer);
+    MonotonicStopWatch sw;
+    sw.start();
     std::lock_guard<std::mutex> l(_lock);
+    sw.stop();
+    t.mclose_wait_lock_timer += sw.elapsed_time();
     DCHECK(_is_init)
             << "delta writer is supposed be to initialized before close_wait() being called";
 
@@ -275,6 +288,7 @@ Status MemTableWriter::_do_close_wait() {
     // return error if previous flush failed
     {
         SCOPED_RAW_TIMER(&_wait_flush_time_ns);
+        SCOPED_RAW_TIMER(&t.mclose_wait_flush_timer);
         st = _flush_token->wait();
     }
     if (UNLIKELY(!st.ok())) {
