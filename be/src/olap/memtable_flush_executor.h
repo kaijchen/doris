@@ -59,7 +59,8 @@ public:
     explicit FlushToken(ThreadPool* thread_pool)
             : _flush_status(Status::OK()), _thread_pool(thread_pool) {}
 
-    Status submit(std::unique_ptr<MemTable> mem_table);
+    //Status submit(std::unique_ptr<MemTable> mem_table);
+    Status submit(std::unique_ptr<MemTable> mem_table, closetimers& t);
 
     // error has happens, so we cancel this token
     // And remove all tasks in the queue.

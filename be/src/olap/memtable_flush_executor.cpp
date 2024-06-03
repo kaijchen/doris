@@ -76,8 +76,9 @@ std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat) {
     return os;
 }
 
-Status FlushToken::submit(std::unique_ptr<MemTable> mem_table) {
+Status FlushToken::submit(std::unique_ptr<MemTable> mem_table, closetimers& t) {
     {
+        SCOPED_RAW_TIMER(&t.ftoken_lock_timer);
         std::shared_lock rdlk(_flush_status_lock);
         DBUG_EXECUTE_IF("FlushToken.submit_flush_error", {
             _flush_status = Status::IOError<false>("dbug_be_memtable_submit_flush_error");
@@ -87,6 +88,7 @@ Status FlushToken::submit(std::unique_ptr<MemTable> mem_table) {
         }
     }
 
+    SCOPED_RAW_TIMER(&t.ftoken_submit_timer);
     if (mem_table == nullptr || mem_table->empty()) {
         return Status::OK();
     }

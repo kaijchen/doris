@@ -142,14 +142,16 @@ Status MemTableWriter::write(const vectorized::Block* block,
     return Status::OK();
 }
 
-Status MemTableWriter::_flush_memtable_async() {
+Status MemTableWriter::_flush_memtable_async(closetimers& t) {
     DCHECK(_flush_token != nullptr);
     std::unique_ptr<MemTable> memtable;
     {
+        SCOPED_RAW_TIMER(&t.mflush_lock_timer);
         std::lock_guard<SpinLock> l(_mem_table_ptr_lock);
         memtable = std::move(_mem_table);
     }
-    return _flush_token->submit(std::move(memtable));
+    SCOPED_RAW_TIMER(&t.mflush_submit_timer);
+    return _flush_token->submit(std::move(memtable), t);
 }
 
 Status MemTableWriter::flush_async() {
@@ -255,7 +257,7 @@ Status MemTableWriter::close(closetimers& t) {
     Status s;
     {
         SCOPED_RAW_TIMER(&t.mclose_flush_timer);
-        s = _flush_memtable_async();
+        s = _flush_memtable_async(t);
     }
     {
         std::lock_guard<SpinLock> l(_mem_table_ptr_lock);

@@ -78,6 +78,10 @@ struct closetimers {
     int64_t mclose_wait_lock_timer = 0;
     int64_t mclose_wait_flush_timer = 0;
     int64_t mclose_profile_timer = 0;
+    int64_t mflush_lock_timer = 0;
+    int64_t mflush_submit_timer = 0;
+    int64_t ftoken_lock_timer = 0;
+    int64_t ftoken_submit_timer = 0;
 };
 
 // row pos in _input_mutable_block

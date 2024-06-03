@@ -123,7 +123,11 @@ public:
 
 private:
     // push a full memtable to flush executor
-    Status _flush_memtable_async();
+    Status _flush_memtable_async() {
+        closetimers t;
+        return _flush_memtable_async(t);
+    }
+    Status _flush_memtable_async(closetimers& t);
 
     void _reset_mem_table();
 
