@@ -82,6 +82,10 @@ struct closetimers {
     int64_t mflush_submit_timer = 0;
     int64_t ftoken_lock_timer = 0;
     int64_t ftoken_submit_timer = 0;
+    int64_t ftoken_submit_counter = 0;
+    int64_t tp_lock_timer = 0;
+    int64_t tp_submit_timer = 0;
+    int64_t tp_create_thread_timer = 0;
 };
 
 // row pos in _input_mutable_block

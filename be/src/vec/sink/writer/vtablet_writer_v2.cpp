@@ -264,6 +264,10 @@ Status VTabletWriterV2::_init(RuntimeState* state, RuntimeProfile* profile) {
     _mflush_submit_timer = ADD_CHILD_TIMER(_profile, "MFlushSubmitTime", "MFlushTime");
     _ftoken_lock_timer = ADD_CHILD_TIMER(_profile, "FlushTokenLockTime", "MFlushTime");
     _ftoken_submit_timer = ADD_CHILD_TIMER(_profile, "FlushTokenSubmitTime", "MFlushTime");
+    _ftoken_submit_counter = ADD_CHILD_COUNTER(_profile, "FlushTokenSubmitCount", TUnit::UNIT, "MFlushTime");
+    _tp_lock_timer = ADD_CHILD_TIMER(_profile, "ThreadPoolLockTime", "MFlushTime");
+    _tp_submit_timer = ADD_CHILD_TIMER(_profile, "ThreadPoolSubmitTime", "MFlushTime");
+    _tp_create_thread_timer = ADD_CHILD_TIMER(_profile, "ThreadPoolCreateThreadTime", "MFlushTime");
 
     if (config::share_delta_writers) {
         _delta_writer_for_tablet = ExecEnv::GetInstance()->delta_writer_v2_pool()->get_or_create(
@@ -613,6 +617,10 @@ Status VTabletWriterV2::close(Status exec_status) {
             COUNTER_UPDATE(_mflush_submit_timer, t.mflush_submit_timer);
             COUNTER_UPDATE(_ftoken_lock_timer, t.ftoken_lock_timer);
             COUNTER_UPDATE(_ftoken_submit_timer, t.ftoken_submit_timer);
+            COUNTER_UPDATE(_ftoken_submit_counter, t.ftoken_submit_counter);
+            COUNTER_UPDATE(_tp_lock_timer, t.tp_lock_timer);
+            COUNTER_UPDATE(_tp_submit_timer, t.tp_submit_timer);
+            COUNTER_UPDATE(_tp_create_thread_timer, t.tp_create_thread_timer);
 
             _delta_writer_for_tablet.reset();
             if (!st.ok()) {

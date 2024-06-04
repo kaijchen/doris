@@ -239,6 +239,10 @@ private:
     RuntimeProfile::Counter* _mflush_submit_timer = nullptr;
     RuntimeProfile::Counter* _ftoken_lock_timer = nullptr;
     RuntimeProfile::Counter* _ftoken_submit_timer = nullptr;
+    RuntimeProfile::Counter* _ftoken_submit_counter = nullptr;
+    RuntimeProfile::Counter* _tp_lock_timer = nullptr;
+    RuntimeProfile::Counter* _tp_submit_timer = nullptr;
+    RuntimeProfile::Counter* _tp_create_thread_timer = nullptr;
 
     std::mutex _close_mutex;
     bool _is_closed = false;

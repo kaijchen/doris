@@ -43,6 +43,12 @@
 
 namespace doris {
 
+struct tptimers {
+    int64_t tp_lock_timer = 0;
+    int64_t tp_submit_timer = 0;
+    int64_t tp_create_thread_timer = 0;
+};
+
 class Thread;
 class ThreadPool;
 class ThreadPoolToken;
@@ -191,7 +197,12 @@ public:
     void shutdown();
 
     // Submits a Runnable class.
-    Status submit(std::shared_ptr<Runnable> r);
+    Status submit(std::shared_ptr<Runnable> r) {
+        tptimers t;
+        return submit(r, t);
+    }
+
+    Status submit(std::shared_ptr<Runnable> r, tptimers& t);
 
     // Submits a function bound using std::bind(&FuncName, args...).
     Status submit_func(std::function<void()> f);
@@ -287,7 +298,11 @@ private:
     void check_not_pool_thread_unlocked();
 
     // Submits a task to be run via token.
-    Status do_submit(std::shared_ptr<Runnable> r, ThreadPoolToken* token);
+    Status do_submit(std::shared_ptr<Runnable> r, ThreadPoolToken* token) {
+        tptimers t;
+        return do_submit(r, token, t);
+    }
+    Status do_submit(std::shared_ptr<Runnable> r, ThreadPoolToken* token, tptimers& timer);
 
     // Releases token 't' and invalidates it.
     void release_token(ThreadPoolToken* t);
@@ -396,7 +411,11 @@ public:
     ~ThreadPoolToken();
 
     // Submits a Runnable class.
-    Status submit(std::shared_ptr<Runnable> r);
+    Status submit(std::shared_ptr<Runnable> r) {
+        tptimers t;
+        return submit(r, t);
+    }
+    Status submit(std::shared_ptr<Runnable> r, tptimers& t);
 
     // Submits a function bound using std::bind(&FuncName, args...).
     Status submit_func(std::function<void()> f);

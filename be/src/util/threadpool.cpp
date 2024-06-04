@@ -34,6 +34,7 @@
 #include "util/debug/sanitizer_scopes.h"
 #include "util/scoped_cleanup.h"
 #include "util/thread.h"
+#include "util/runtime_profile.h"
 
 namespace doris {
 using namespace ErrorCode;
@@ -99,8 +100,8 @@ ThreadPoolToken::~ThreadPoolToken() {
     _pool->release_token(this);
 }
 
-Status ThreadPoolToken::submit(std::shared_ptr<Runnable> r) {
-    return _pool->do_submit(std::move(r), this);
+Status ThreadPoolToken::submit(std::shared_ptr<Runnable> r, tptimers& t) {
+    return _pool->do_submit(std::move(r), this, t);
 }
 
 Status ThreadPoolToken::submit_func(std::function<void()> f) {
@@ -345,20 +346,25 @@ void ThreadPool::release_token(ThreadPoolToken* t) {
     CHECK_EQ(1, _tokens.erase(t));
 }
 
-Status ThreadPool::submit(std::shared_ptr<Runnable> r) {
-    return do_submit(std::move(r), _tokenless.get());
+Status ThreadPool::submit(std::shared_ptr<Runnable> r, tptimers& t) {
+    return do_submit(std::move(r), _tokenless.get(), t);
 }
 
 Status ThreadPool::submit_func(std::function<void()> f) {
     return submit(std::make_shared<FunctionRunnable>(std::move(f)));
 }
 
-Status ThreadPool::do_submit(std::shared_ptr<Runnable> r, ThreadPoolToken* token) {
+Status ThreadPool::do_submit(std::shared_ptr<Runnable> r, ThreadPoolToken* token, tptimers& t) {
     DCHECK(token);
     std::chrono::time_point<std::chrono::system_clock> submit_time =
             std::chrono::system_clock::now();
 
+    MonotonicStopWatch sw;
+    sw.start();
     std::unique_lock<std::mutex> l(_lock);
+    sw.stop();
+    t.tp_lock_timer += sw.elapsed_time();
+    SCOPED_RAW_TIMER(&t.tp_submit_timer);
     if (PREDICT_FALSE(!_pool_status.ok())) {
         return _pool_status;
     }
@@ -444,6 +450,7 @@ Status ThreadPool::do_submit(std::shared_ptr<Runnable> r, ThreadPoolToken* token
     l.unlock();
 
     if (need_a_thread) {
+        SCOPED_RAW_TIMER(&t.tp_create_thread_timer);
         Status status = create_thread();
         if (!status.ok()) {
             l.lock();

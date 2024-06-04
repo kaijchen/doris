@@ -88,6 +88,7 @@ Status FlushToken::submit(std::unique_ptr<MemTable> mem_table, closetimers& t) {
         }
     }
 
+    t.ftoken_submit_counter++;
     SCOPED_RAW_TIMER(&t.ftoken_submit_timer);
     if (mem_table == nullptr || mem_table->empty()) {
         return Status::OK();
@@ -95,7 +96,11 @@ Status FlushToken::submit(std::unique_ptr<MemTable> mem_table, closetimers& t) {
     int64_t submit_task_time = MonotonicNanos();
     auto task = std::make_shared<MemtableFlushTask>(
             this, std::move(mem_table), _rowset_writer->allocate_segment_id(), submit_task_time);
-    Status ret = _thread_pool->submit(std::move(task));
+    tptimers tp {};
+    Status ret = _thread_pool->submit(std::move(task), tp);
+    t.tp_lock_timer += tp.tp_lock_timer;
+    t.tp_submit_timer += tp.tp_submit_timer;
+    t.tp_create_thread_timer += tp.tp_create_thread_timer;
     if (ret.ok()) {
         _stats.flush_running_count++;
     }
