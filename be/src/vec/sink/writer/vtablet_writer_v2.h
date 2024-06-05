@@ -136,6 +136,8 @@ private:
 
     Status _build_tablet_node_mapping();
 
+    Status _write(Block& block);
+
     void _generate_rows_for_tablet(std::vector<RowPartTabletIds>& row_part_tablet_ids,
                                    RowsForTablet& rows_for_tablet);
 
@@ -267,6 +269,8 @@ private:
     VRowDistribution _row_distribution;
     // reuse to avoid frequent memory allocation and release.
     std::vector<RowPartTabletIds> _row_part_tablet_ids;
+
+    MutableBlock _batched_block;
 };
 
 } // namespace vectorized

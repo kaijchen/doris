@@ -409,6 +409,16 @@ Status VTabletWriterV2::_select_streams(int64_t tablet_id, int64_t partition_id,
 }
 
 Status VTabletWriterV2::write(Block& input_block) {
+    _batched_block.add_row(&input_block, input_block.rows());
+    if (_batched_block.rows() > config::sink_v2_batch_rows) {
+        auto block = _batched_block.to_block();
+        RETURN_IF_ERROR(_write(block));
+        _batched_block.clear_column_data();
+    }
+    return Status::OK();
+}
+
+Status VTabletWriterV2::_write(Block& input_block) {
     SCOPED_CONSUME_MEM_TRACKER(_mem_tracker.get());
     Status status = Status::OK();
 
@@ -566,6 +576,11 @@ Status VTabletWriterV2::_send_new_partition_batch() {
 }
 
 Status VTabletWriterV2::close(Status exec_status) {
+    if (_batched_block.rows() > 0) {
+        auto block = _batched_block.to_block();
+        RETURN_IF_ERROR(_write(block));
+        _batched_block.clear_column_data();
+    }
     std::lock_guard<std::mutex> close_lock(_close_mutex);
     if (_is_closed) {
         return _close_status;
