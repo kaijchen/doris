@@ -623,7 +623,7 @@ public:
 private:
     Status create_error_log_file();
 
-    static const int DEFAULT_BATCH_SIZE = 16248;
+    static const int DEFAULT_BATCH_SIZE = 4062;
 
     std::shared_ptr<MemTrackerLimiter> _query_mem_tracker = nullptr;
 
