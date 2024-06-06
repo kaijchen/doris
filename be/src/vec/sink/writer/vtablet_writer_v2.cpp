@@ -268,6 +268,7 @@ Status VTabletWriterV2::_init(RuntimeState* state, RuntimeProfile* profile) {
     _tp_lock_timer = ADD_CHILD_TIMER(_profile, "ThreadPoolLockTime", "MFlushTime");
     _tp_submit_timer = ADD_CHILD_TIMER(_profile, "ThreadPoolSubmitTime", "MFlushTime");
     _tp_create_thread_timer = ADD_CHILD_TIMER(_profile, "ThreadPoolCreateThreadTime", "MFlushTime");
+    _batch_copy_timer = ADD_CHILD_TIMER(_profile, "BatchCopyTime", "SendDataTime");
 
     if (config::share_delta_writers) {
         _delta_writer_for_tablet = ExecEnv::GetInstance()->delta_writer_v2_pool()->get_or_create(
@@ -409,10 +410,13 @@ Status VTabletWriterV2::_select_streams(int64_t tablet_id, int64_t partition_id,
 }
 
 Status VTabletWriterV2::write(Block& input_block) {
-    if (_batched_block.empty()) {
-        _batched_block = MutableBlock(input_block.clone_empty());
+    {
+        SCOPED_TIMER(_batch_copy_timer);
+        if (_batched_block.empty()) {
+            _batched_block = MutableBlock(input_block.clone_empty());
+        }
+        RETURN_IF_ERROR(_batched_block.add_rows(&input_block, 0, input_block.rows()));
     }
-    RETURN_IF_ERROR(_batched_block.add_rows(&input_block, 0, input_block.rows()));
     if (_batched_block.rows() > config::sink_v2_batch_rows) {
         auto block = _batched_block.to_block();
         RETURN_IF_ERROR(_write(block));

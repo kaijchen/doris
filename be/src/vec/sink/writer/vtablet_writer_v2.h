@@ -245,6 +245,7 @@ private:
     RuntimeProfile::Counter* _tp_lock_timer = nullptr;
     RuntimeProfile::Counter* _tp_submit_timer = nullptr;
     RuntimeProfile::Counter* _tp_create_thread_timer = nullptr;
+    RuntimeProfile::Counter* _batch_copy_timer = nullptr;
 
     std::mutex _close_mutex;
     bool _is_closed = false;
