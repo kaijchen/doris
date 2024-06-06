@@ -410,6 +410,17 @@ Status VTabletWriterV2::_select_streams(int64_t tablet_id, int64_t partition_id,
 }
 
 Status VTabletWriterV2::write(Block& input_block) {
+    if (input_block.rows() == 0) [[unlikely]] {
+        return Status::OK();
+    }
+    if (input_block.rows() > config::sink_v2_batch_rows) {
+        if (!_batched_block.empty()) [[unlikely]] {
+            auto block = _batched_block.to_block();
+            RETURN_IF_ERROR(_write(block));
+            _batched_block.clear_column_data();
+        }
+        return _write(input_block);
+    }
     {
         SCOPED_TIMER(_batch_copy_timer);
         if (_batched_block.empty()) {
