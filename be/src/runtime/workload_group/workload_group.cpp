@@ -431,7 +431,7 @@ void WorkloadGroup::upsert_task_scheduler(WorkloadGroupInfo* tg_info, ExecEnv* e
     if (_non_pipe_thread_pool == nullptr) {
         std::unique_ptr<ThreadPool> thread_pool = nullptr;
         auto ret = ThreadPoolBuilder("nonPip_" + tg_name)
-                           .set_min_threads(config::fragment_pool_thread_num_max)
+                           .set_min_threads(1)
                            .set_max_threads(config::fragment_pool_thread_num_max)
                            .set_max_queue_size(config::fragment_pool_queue_size)
                            .set_cgroup_cpu_ctl(cg_cpu_ctl_ptr)
