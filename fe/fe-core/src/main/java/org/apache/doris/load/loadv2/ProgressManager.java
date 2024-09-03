@@ -86,7 +86,9 @@ public class ProgressManager {
         }
 
         public synchronized void updateFinishedScanNums(TUniqueId queryId, TUniqueId fragmentId, int finishedScanNum) {
-            finishedScanNums.put(queryId, fragmentId, finishedScanNum);
+            Integer value = finishedScanNums.get(queryId, fragmentId);
+            int current = value == null ? 0 : value;
+            finishedScanNums.put(queryId, fragmentId, current + finishedScanNum);
         }
 
         public int getTotalScanNums() {
