@@ -372,7 +372,7 @@ void Block::set_num_rows(size_t length) {
     if (rows() > length) {
         for (auto& elem : data) {
             if (elem.column) {
-                elem.column = elem.column->cut(0, length);
+                elem.column = elem.column->shrink(length);
             }
         }
         if (length < row_same_bit.size()) {
@@ -854,7 +854,7 @@ Status Block::append_to_block_by_selector(MutableBlock* dst,
 }
 
 Status Block::filter_block(Block* block, const std::vector<uint32_t>& columns_to_filter,
-                           int filter_column_id, int column_to_keep) {
+                           size_t filter_column_id, size_t column_to_keep) {
     const auto& filter_column = block->get_by_position(filter_column_id).column;
     if (const auto* nullable_column = check_and_get_column<ColumnNullable>(*filter_column)) {
         const auto& nested_column = nullable_column->get_nested_column_ptr();
@@ -892,7 +892,7 @@ Status Block::filter_block(Block* block, const std::vector<uint32_t>& columns_to
     return Status::OK();
 }
 
-Status Block::filter_block(Block* block, int filter_column_id, int column_to_keep) {
+Status Block::filter_block(Block* block, size_t filter_column_id, size_t column_to_keep) {
     std::vector<uint32_t> columns_to_filter;
     columns_to_filter.resize(column_to_keep);
     for (uint32_t i = 0; i < column_to_keep; ++i) {
