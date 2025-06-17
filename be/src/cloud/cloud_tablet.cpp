@@ -70,17 +70,27 @@ bvar::Adder<int64_t> g_unused_rowsets_bytes("unused_rowsets_bytes");
 
 static constexpr int LOAD_INITIATOR_ID = -1;
 
-bvar::Adder<uint64_t> g_file_cache_cloud_tablet_submitted_segment_size("file_cache_cloud_tablet_submitted_segment_size");
-bvar::Adder<uint64_t> g_file_cache_cloud_tablet_submitted_segment_num("file_cache_cloud_tablet_submitted_segment_num");
-bvar::Adder<uint64_t> g_file_cache_cloud_tablet_submitted_index_size("file_cache_cloud_tablet_submitted_index_size");
-bvar::Adder<uint64_t> g_file_cache_cloud_tablet_submitted_index_num("file_cache_cloud_tablet_submitted_index_num");
-bvar::Adder<uint64_t> g_file_cache_cloud_tablet_finished_segment_size("file_cache_cloud_tablet_finished_segment_size");
-bvar::Adder<uint64_t> g_file_cache_cloud_tablet_finished_segment_num("file_cache_cloud_tablet_finished_segment_num");
-bvar::Adder<uint64_t> g_file_cache_cloud_tablet_finished_index_size("file_cache_cloud_tablet_finished_index_size");
-bvar::Adder<uint64_t> g_file_cache_cloud_tablet_finished_index_num("file_cache_cloud_tablet_finished_index_num");
+bvar::Adder<uint64_t> g_file_cache_cloud_tablet_submitted_segment_size(
+        "file_cache_cloud_tablet_submitted_segment_size");
+bvar::Adder<uint64_t> g_file_cache_cloud_tablet_submitted_segment_num(
+        "file_cache_cloud_tablet_submitted_segment_num");
+bvar::Adder<uint64_t> g_file_cache_cloud_tablet_submitted_index_size(
+        "file_cache_cloud_tablet_submitted_index_size");
+bvar::Adder<uint64_t> g_file_cache_cloud_tablet_submitted_index_num(
+        "file_cache_cloud_tablet_submitted_index_num");
+bvar::Adder<uint64_t> g_file_cache_cloud_tablet_finished_segment_size(
+        "file_cache_cloud_tablet_finished_segment_size");
+bvar::Adder<uint64_t> g_file_cache_cloud_tablet_finished_segment_num(
+        "file_cache_cloud_tablet_finished_segment_num");
+bvar::Adder<uint64_t> g_file_cache_cloud_tablet_finished_index_size(
+        "file_cache_cloud_tablet_finished_index_size");
+bvar::Adder<uint64_t> g_file_cache_cloud_tablet_finished_index_num(
+        "file_cache_cloud_tablet_finished_index_num");
 
-bvar::Adder<uint64_t> g_file_cache_recycle_cached_data_segment_num("file_cache_recycle_cached_data_segment_num");
-bvar::Adder<uint64_t> g_file_cache_recycle_cached_data_segment_size("file_cache_recycle_cached_data_segment_size");
+bvar::Adder<uint64_t> g_file_cache_recycle_cached_data_segment_num(
+        "file_cache_recycle_cached_data_segment_num");
+bvar::Adder<uint64_t> g_file_cache_recycle_cached_data_segment_size(
+        "file_cache_recycle_cached_data_segment_size");
 
 CloudTablet::CloudTablet(CloudStorageEngine& engine, TabletMetaSharedPtr tablet_meta)
         : BaseTablet(std::move(tablet_meta)), _engine(engine) {}
@@ -339,7 +349,7 @@ void CloudTablet::add_rowsets(std::vector<RowsetSharedPtr> to_add, bool version_
                                 index_size_map[info.index_id()] = info.index_file_size();
                             } else {
                                 VLOG_DEBUG << "Invalid index_file_size for segment_id " << seg_id
-                                        << ", index_id " << info.index_id();
+                                           << ", index_id " << info.index_id();
                             }
                         }
                         for (const auto& index : schema_ptr->inverted_indexes()) {
@@ -350,7 +360,8 @@ void CloudTablet::add_rowsets(std::vector<RowsetSharedPtr> to_add, bool version_
                         }
                     } else {
                         if (schema_ptr->has_inverted_index()) {
-                            auto&& inverted_index_info = rowset_meta->inverted_index_file_info(seg_id);
+                            auto&& inverted_index_info =
+                                    rowset_meta->inverted_index_file_info(seg_id);
                             int64_t idx_size = 0;
                             if (inverted_index_info.has_index_size()) {
                                 idx_size = inverted_index_info.index_size();
