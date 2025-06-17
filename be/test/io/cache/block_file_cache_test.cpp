@@ -7367,7 +7367,6 @@ TEST_F(BlockFileCacheTest, reader_dryrun_when_download_file_cache) {
 
 void move_dir_to_version1(const std::string& dirPath) {
     try {
-        // layer 1
         for (const auto& entry : fs::directory_iterator(dirPath)) {
             if (fs::is_directory(entry)) {
                 std::string firstLevelDir = entry.path().string();
@@ -7761,8 +7760,6 @@ TEST_F(BlockFileCacheTest, test_upgrade_cache_dir_version) {
 }
 
 TEST_F(BlockFileCacheTest, cached_remote_file_reader_ttl_index) {
-    if (fs::exists(cache_base_path)) {
-        fs::remove_all(cache_base_path);
     }
     fs::create_directories(cache_base_path);
     TUniqueId query_id;
