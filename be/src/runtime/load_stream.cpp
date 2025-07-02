@@ -166,7 +166,7 @@ Status TabletStream::append_data(const PStreamHeader& header, butil::IOBuf* data
                 st = _load_stream_writer->close_writer(new_segid, file_type);
             } else {
                 st = Status::InternalError(
-                        "appent data failed, file type error, file type = {}, "
+                        "append data failed, file type error, file type = {}, "
                         "segment_id={}",
                         file_type, new_segid);
             }

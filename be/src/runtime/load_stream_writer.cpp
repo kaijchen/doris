@@ -163,7 +163,7 @@ Status LoadStreamWriter::close_writer(uint32_t segid, FileType file_type) {
     DBUG_EXECUTE_IF("LoadStreamWriter.close_writer.null_file_writer", { file_writer = nullptr; });
     if (file_writer == nullptr) {
         return Status::Corruption(
-                "close_writer failed, file writer {} is destoryed, fiel type is {}", segid,
+                "close_writer failed, file writer {} is destoryed, file type is {}", segid,
                 file_type);
     }
     auto st = file_writer->close();
