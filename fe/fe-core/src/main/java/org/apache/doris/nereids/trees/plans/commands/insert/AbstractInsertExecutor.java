@@ -43,7 +43,9 @@ import org.apache.doris.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Arrays;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * Abstract insert executor.
@@ -179,6 +181,11 @@ public abstract class AbstractInsertExecutor {
         // if in strict mode, insert will fail if there are filtered rows
         if (ctx.getSessionVariable().getEnableInsertStrict()) {
             if (filteredRows > 0) {
+                LOG.info("Insert has filtered data in strict mode, stack trace {}",
+                        Arrays.stream(Thread.currentThread().getStackTrace())
+                                .skip(2)
+                                .map(StackTraceElement::toString)
+                                .collect(Collectors.joining("\n\tat ", "", "")));
                 ErrorReport.reportDdlException("Insert has filtered data in strict mode",
                         ErrorCode.ERR_FAILED_WHEN_INSERT);
             }
