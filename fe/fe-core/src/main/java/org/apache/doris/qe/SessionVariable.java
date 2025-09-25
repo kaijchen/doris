@@ -2673,7 +2673,7 @@ public class SessionVariable implements Serializable, Writable {
 
 
     // CLOUD_VARIABLES_BEGIN
-    @VariableMgr.VarAttr(name = CLOUD_CLUSTER)
+    @VariableMgr.VarAttr(name = CLOUD_CLUSTER, aliases = {"compute_group",})
     public String cloudCluster = "";
     @VariableMgr.VarAttr(name = DISABLE_EMPTY_PARTITION_PRUNE)
     public boolean disableEmptyPartitionPrune = false;
